@@ -546,8 +546,9 @@ def ingest(vps_host: str = "bot@85.137.174.57",
     import subprocess
     try:
         before = set(os.listdir(RECORDINGS_DIR))
+        # macOS rsync (2.6.9) doesn't support --info=stats1 — use -v and parse manually
         r = subprocess.run(
-            ["rsync", "-az", "--info=stats1",
+            ["rsync", "-avz", "--stats",
              f"{vps_host}:{vps_dir}/", f"{RECORDINGS_DIR}/"],
             check=True, capture_output=True, text=True,
         )
@@ -555,7 +556,8 @@ def ingest(vps_host: str = "bot@85.137.174.57",
         results["vps_pulled"] = len(after - before)
         # rsync summarizes transferred file count in its stats block
         for ln in (r.stdout or "").splitlines():
-            if "Number of regular files transferred" in ln:
+            if "Number of regular files transferred" in ln or \
+               "Number of created files" in ln:
                 print(f"[ingest]   {ln.strip()}")
     except subprocess.CalledProcessError as e:
         results["errors"].append(f"rsync failed (exit {e.returncode}): {e.stderr[:200]}")
