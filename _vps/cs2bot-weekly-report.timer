@@ -1,0 +1,9 @@
+[Unit]
+Description=Fire CS2 bot WEEKLY deep audit every Sunday at 10:00 UTC
+
+[Timer]
+OnCalendar=Sun *-*-* 10:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

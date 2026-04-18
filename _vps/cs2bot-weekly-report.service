@@ -1,0 +1,13 @@
+[Unit]
+Description=CS2 bot weekly deep audit (Telegram)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=bot
+Group=bot
+WorkingDirectory=/home/bot/esports
+ExecStart=/home/bot/esports/venv/bin/python /home/bot/esports/daily_report.py --weekly
+StandardOutput=append:/home/bot/esports/_logs/weekly_report.log
+StandardError=append:/home/bot/esports/_logs/weekly_report.log
