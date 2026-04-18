@@ -640,31 +640,51 @@ class EsportsBot:
     def _on_raw_bo3_snapshot(self, match_id: str, raw_payload: dict):
         """Record the full bo3.gg payload as a SNAPSHOT_MATCH_UPDATE line.
 
-        Shape-compatible with the curated Test Data/ recordings our backtester
-        was built against — replay_rich.py parses live_updates + team_one /
-        team_two + player_states out of these.
+        Handles BOTH provider shapes we consume:
 
-        We record the whole payload (not just live_updates) so we also keep
-        team1/team2 name blocks, match metadata, slug, etc. for META recovery.
+          1. WebSocket payload (cs2_bo3_ws.py):
+             {"id": ..., "live_updates": {...rich...}, "team1": {...}, "team2": {...}}
+
+          2. REST snapshot (cs2_bo3.py polling feed):
+             {"team_one": {...}, "team_two": {...}, "round_phase": ..., ...}
+             (the rich fields are at the TOP level; no live_updates wrapper)
+
+        Shape-compatible with the curated Test Data/ SNAPSHOT_MATCH_UPDATE
+        records our backtester was built against: team_one / team_two with
+        player_states, round_phase, round_time, is_bomb_planted, etc.
         """
         try:
             if not self.recorder or not match_id:
                 return
-            # Team names for the recorder's filename fallback
-            live = raw_payload.get("live_updates", {}) or {}
-            team1 = raw_payload.get("team1", {})
-            team2 = raw_payload.get("team2", {})
-            ta = team1.get("name", "") if isinstance(team1, dict) else ""
-            tb = team2.get("name", "") if isinstance(team2, dict) else ""
-            # Build a record that looks like the curated SNAPSHOT_MATCH_UPDATE:
-            # - top-level "message_type" inside raw (some parsers look there)
-            # - live_updates flattened plus player_states / round_phase etc
-            record = dict(live)
+
+            # Decide which shape we have by sniffing the live_updates key
+            live = raw_payload.get("live_updates")
+            if isinstance(live, dict) and live:
+                # Shape 1: WebSocket. Lift live_updates to the top level + keep
+                # the team1/team2 name blocks for META recovery.
+                base = dict(live)
+                team1 = raw_payload.get("team1") or {}
+                team2 = raw_payload.get("team2") or {}
+                if isinstance(team1, dict) and team1:
+                    base["team_one_meta"] = team1
+                if isinstance(team2, dict) and team2:
+                    base["team_two_meta"] = team2
+            else:
+                # Shape 2: REST polling. The payload IS already the snapshot.
+                # Copy it as-is (this carries team_one, team_two with
+                # player_states, round_phase, is_bomb_planted, round_time_*,
+                # equipment_value, match_fixture, etc).
+                base = dict(raw_payload)
+
+            # Extract team names for the recorder's filename generator
+            t1 = base.get("team_one") or base.get("team_one_meta") or {}
+            t2 = base.get("team_two") or base.get("team_two_meta") or {}
+            ta = (t1.get("name", "") if isinstance(t1, dict) else "") or ""
+            tb = (t2.get("name", "") if isinstance(t2, dict) else "") or ""
+
+            record = base
             record["message_type"] = "SNAPSHOT_MATCH_UPDATE"
             record["match_id"] = match_id
-            # Carry team blocks so downstream parsers can recover names/IDs
-            if team1: record["team_one_meta"] = team1
-            if team2: record["team_two_meta"] = team2
             self.recorder._write(match_id, "SNAPSHOT_MATCH_UPDATE", record, ta, tb)
         except Exception as e:
             logger.debug(f"[RAW-SNAP] record failed: {e}")
@@ -2106,8 +2126,10 @@ class EsportsBot:
                             ws_a.get("best_bid", 0), ws_a.get("best_ask", 0),
                             state.team_a, state.team_b,
                         )
-                        # Record game state snapshot
-                        self.recorder.record_snapshot(match_id, state, market, state.team_a, state.team_b)
+                        # (thin game-state snapshot DISABLED — the bo3.gg raw-payload
+                        # handler _on_raw_bo3_snapshot writes rich SNAPSHOT_MATCH_UPDATE
+                        # lines on every provider tick. Writing a thin one here too
+                        # would just poison the training corpus with 8-field records.)
                 except Exception as e:
                     pass  # don't crash the thread
                 _time.sleep(5)

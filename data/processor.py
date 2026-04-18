@@ -10,12 +10,14 @@ Recording processor — turns raw ``data/recordings/*.jsonl`` files into:
 
 USAGE (from repo root):
 
+  python data/processor.py ingest                   # pull VPS recordings + import Test Data/
   python data/processor.py validate                 # scan all recordings, print a report
   python data/processor.py validate --out report.json
   python data/processor.py process <file.jsonl>     # normalize one file
   python data/processor.py process-all              # process every backtest-ready file
   python data/processor.py build-sft                # derive SFT dataset from processed files
   python data/processor.py build-rl                 # derive RL dataset
+  python data/processor.py summary                  # one-screen stats + top-10 trainable
 
 See RECORDING_SCHEMA.md for the canonical recording format.
 """
@@ -513,12 +515,137 @@ def _infer_game_from_path(p: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Ingest — pull remote recordings + import historical corpora into one place
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Source of truth for where recordings live.
+# Priority (first match wins when multiple sources have the same match_id):
+#   1. data/recordings/       (local — whatever's already here, incl. Mac history)
+#   2. rsync from VPS         (data/recordings_vps/ → merged in)
+#   3. Test Data/old_recordings/  (curated corpus, already rich)
+#
+# After ingest every usable recording lives under data/recordings/ with a
+# canonical filename. The processor then treats them all uniformly.
+
+TEST_DATA_DIR = os.path.join(REPO, "Test Data", "old_recordings")
+
+
+def ingest(vps_host: str = "bot@85.137.174.57",
+           vps_dir: str = "/home/bot/esports/data/recordings",
+           import_test_data: bool = True) -> dict:
+    """Pull remote VPS recordings + import historical Test Data into one corpus.
+
+    Idempotent: safe to rerun. rsync only copies new/changed files; Test Data
+    import uses hard-link when on the same filesystem (zero-copy).
+    """
+    os.makedirs(RECORDINGS_DIR, exist_ok=True)
+    results = {"vps_pulled": 0, "testdata_linked": 0, "errors": []}
+
+    # 1. Rsync from VPS
+    print(f"[ingest] pulling from VPS {vps_host}:{vps_dir}/ → data/recordings/")
+    import subprocess
+    try:
+        before = set(os.listdir(RECORDINGS_DIR))
+        r = subprocess.run(
+            ["rsync", "-az", "--info=stats1",
+             f"{vps_host}:{vps_dir}/", f"{RECORDINGS_DIR}/"],
+            check=True, capture_output=True, text=True,
+        )
+        after = set(os.listdir(RECORDINGS_DIR))
+        results["vps_pulled"] = len(after - before)
+        # rsync summarizes transferred file count in its stats block
+        for ln in (r.stdout or "").splitlines():
+            if "Number of regular files transferred" in ln:
+                print(f"[ingest]   {ln.strip()}")
+    except subprocess.CalledProcessError as e:
+        results["errors"].append(f"rsync failed (exit {e.returncode}): {e.stderr[:200]}")
+    except FileNotFoundError:
+        results["errors"].append("rsync not installed")
+
+    # 2. Import Test Data/ (curated corpus — already rich)
+    if import_test_data and os.path.isdir(TEST_DATA_DIR):
+        print(f"[ingest] importing {TEST_DATA_DIR} → data/recordings/")
+        for fn in sorted(os.listdir(TEST_DATA_DIR)):
+            if not fn.endswith(".jsonl"):
+                continue
+            src = os.path.join(TEST_DATA_DIR, fn)
+            # Canonicalize filename — prefix with "tt_" to mark as Test Data origin
+            # (so we never accidentally overwrite live recordings with an old file)
+            dst_name = "tt_" + fn if not fn.startswith("tt_") else fn
+            dst = os.path.join(RECORDINGS_DIR, dst_name)
+            if os.path.exists(dst):
+                continue
+            try:
+                # Prefer hard link (zero-copy, same FS); fallback to copy
+                os.link(src, dst)
+            except OSError:
+                import shutil
+                shutil.copy2(src, dst)
+            results["testdata_linked"] += 1
+
+    print(f"[ingest] done — pulled {results['vps_pulled']} from VPS, "
+          f"linked {results['testdata_linked']} from Test Data/")
+    if results["errors"]:
+        print(f"[ingest] errors:")
+        for e in results["errors"]:
+            print(f"   {e}")
+    return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Summary — one-screen stats useful as a "do we have enough data yet?" readout
+# ─────────────────────────────────────────────────────────────────────────────
+
+def summary(pattern: str = "*.jsonl") -> None:
+    reports = validate_all(pattern=pattern)
+    if not reports:
+        print(f"no files matched {pattern} in {RECORDINGS_DIR}")
+        return
+    print_validation_summary(reports)
+
+    # Minutes of rich data per game
+    mins_by_game: dict[str, float] = {}
+    for r in reports:
+        if r.training_ready:
+            mins_by_game.setdefault(r.game or "unknown", 0.0)
+            mins_by_game[r.game or "unknown"] += r.duration_s / 60.0
+    if mins_by_game:
+        print("\ntraining-ready duration per game:")
+        for g, m in sorted(mins_by_game.items(), key=lambda kv: -kv[1]):
+            print(f"  {g:<10} {m:.0f} min ({m/60:.1f} hours)")
+
+    # Tournament diversity (from filenames — rough proxy)
+    names = set()
+    for r in reports:
+        if r.training_ready:
+            names.add(os.path.basename(r.path).split("_")[0])
+    print(f"\nunique match IDs in training-ready set: {len(names)}")
+
+    # Yardstick for "enough data to train a small adapter"
+    rich_mins = sum(mins_by_game.values())
+    if rich_mins < 60:
+        print(f"\n⚠️  only {rich_mins:.0f} min of rich data — keep collecting")
+    elif rich_mins < 600:
+        print(f"\n✅ {rich_mins:.0f} min of rich data — enough for backtest regression tests")
+    else:
+        print(f"\n✅ {rich_mins:.0f} min of rich data — enough to start prompt tuning / small fine-tune")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CLI
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
+
+    i = sub.add_parser("ingest", help="pull VPS recordings + import Test Data")
+    i.add_argument("--vps", default="bot@85.137.174.57")
+    i.add_argument("--vps-dir", default="/home/bot/esports/data/recordings")
+    i.add_argument("--no-test-data", action="store_true",
+                   help="skip linking Test Data/old_recordings")
+
+    sub.add_parser("summary", help="one-screen stats + top training-ready files")
 
     v = sub.add_parser("validate", help="scan recordings, print ready/not-ready")
     v.add_argument("--out", default="", help="write JSON report to this path")
@@ -534,7 +661,14 @@ def main():
 
     args = ap.parse_args()
 
-    if args.cmd == "validate":
+    if args.cmd == "ingest":
+        ingest(vps_host=args.vps, vps_dir=args.vps_dir,
+               import_test_data=not args.no_test_data)
+
+    elif args.cmd == "summary":
+        summary()
+
+    elif args.cmd == "validate":
         reports = validate_all(pattern=args.pattern)
         print_validation_summary(reports)
         if args.out:
