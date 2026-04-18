@@ -72,3 +72,8 @@ tmp/
 .wrapper.pid
 _monitor.out
 nohup.out.*
+nohup*.out
+nohup 3.out
+data/training/
+data/archive-*/
+nohup *.out
