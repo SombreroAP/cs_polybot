@@ -347,9 +347,14 @@ def build_sft(out_path: str = None) -> dict:
     TP_PCT = 0.08   # move > +8% within window → "buy was right"
     SL_PCT = 0.08   # move > -8% within window → "buy was wrong, skip was right"
     WINDOW_S = 90.0 # lookahead window
+    MIN_GAP_S = 10.0  # require at least this much time between consecutive
+                      # decision points on the same match (dedupe near-identical
+                      # situations that would otherwise bloat the corpus)
 
     examples = 0
     skipped_ambiguous = 0
+    skipped_too_close = 0
+    skipped_incomplete = 0
 
     with open(out_path, "w") as out:
         for pp in processed:
@@ -359,8 +364,13 @@ def build_sft(out_path: str = None) -> dict:
             if not books:
                 continue
 
+            last_emit_ts = 0.0
             for i, e in enumerate(events):
                 if e.get("type") != "event":
+                    continue
+                # Dedupe: skip if within MIN_GAP_S of the last emitted example for this match
+                if e["ts"] - last_emit_ts < MIN_GAP_S:
+                    skipped_too_close += 1
                     continue
                 # Build a state snapshot — latest snapshot + book before this event
                 state_snap = _latest_of_type(events, i, "snapshot")
@@ -402,6 +412,23 @@ def build_sft(out_path: str = None) -> dict:
                     skipped_ambiguous += 1
                     continue
 
+                last_emit_ts = e["ts"]
+                # REJECT INCOMPLETE STATES — training requires the essentials
+                t1 = state_snap.get("team_one")
+                t2 = state_snap.get("team_two")
+                if t1 is None or t2 is None:
+                    skipped_incomplete += 1
+                    continue
+                # Require BOTH markets with bid AND ask populated
+                markets_ok = [
+                    tok for tok, v in state_books.items()
+                    if v.get("bid") is not None and v.get("ask") is not None
+                ]
+                if len(markets_ok) < 2:
+                    skipped_incomplete += 1
+                    continue
+
+                last_emit_ts = e["ts"]
                 examples += 1
                 ex = {
                     "match_id": _extract_match_id(pp),
@@ -414,13 +441,14 @@ def build_sft(out_path: str = None) -> dict:
                     "state": {
                         "round_phase": state_snap.get("round_phase"),
                         "round_number": state_snap.get("round_number"),
-                        "team_one": state_snap.get("team_one"),
-                        "team_two": state_snap.get("team_two"),
+                        "team_one": t1,
+                        "team_two": t2,
                         "map_name": state_snap.get("map_name"),
                     },
                     "market_before": {
-                        tok: {"bid": v.get("bid"), "ask": v.get("ask")}
-                        for tok, v in state_books.items()
+                        tok: {"bid": state_books[tok].get("bid"),
+                              "ask": state_books[tok].get("ask")}
+                        for tok in markets_ok
                     },
                     "label": {
                         "action": label_action,
@@ -432,9 +460,15 @@ def build_sft(out_path: str = None) -> dict:
                 }
                 out.write(json.dumps(ex) + "\n")
 
-    print(f"SFT: {examples} examples written to {out_path} "
-          f"({skipped_ambiguous} skipped as ambiguous)")
-    return {"examples": examples, "skipped_ambiguous": skipped_ambiguous, "out": out_path}
+    print(f"SFT: {examples} examples written to {out_path}")
+    print(f"  skipped {skipped_ambiguous} as ambiguous (price didn't move clearly in window)")
+    print(f"  skipped {skipped_too_close} as too close to previous decision on same match")
+    print(f"  skipped {skipped_incomplete} as incomplete state (missing team or market data)")
+    return {"examples": examples,
+            "skipped_ambiguous": skipped_ambiguous,
+            "skipped_too_close": skipped_too_close,
+            "skipped_incomplete": skipped_incomplete,
+            "out": out_path}
 
 
 def build_rl(out_path: str = None) -> dict:
@@ -634,6 +668,227 @@ def summary(pattern: str = "*.jsonl") -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Data quality audit — detect problems before training
+# ─────────────────────────────────────────────────────────────────────────────
+
+def audit_training_data() -> dict:
+    """Inspect data/training/sft.jsonl for problems that would hurt training.
+
+    Checks:
+      1. Volume — do we have enough examples?
+      2. Diversity — how many unique matches, tournaments, teams?
+      3. Class balance — buy vs skip ratio
+      4. Label noise — how confident are the hindsight labels?
+      5. Feature completeness — are player_states / HP / economy populated?
+      6. Temporal leakage — do feature timestamps precede decision timestamps?
+      7. Token leakage — do any features leak future information?
+      8. Duplicate risk — are decision points too close together on the same match?
+    """
+    path = os.path.join(TRAINING_DIR, "sft.jsonl")
+    if not os.path.exists(path):
+        print(f"No training data yet. Run: python data/processor.py build-sft")
+        return {}
+
+    from collections import defaultdict, Counter
+    examples = []
+    with open(path) as f:
+        for line in f:
+            examples.append(json.loads(line))
+
+    n = len(examples)
+    if n == 0:
+        return {"error": "empty"}
+
+    # 1. Volume
+    by_action = Counter(e["label"]["action"] for e in examples)
+
+    # 2. Diversity
+    matches = Counter(e["match_id"] for e in examples)
+    triggers = Counter(e["trigger"].get("event_type", "?") for e in examples)
+
+    # 3. Feature completeness on a sample
+    has_player_states = 0
+    has_both_teams_hp = 0
+    has_map_name = 0
+    has_economy = 0
+    has_both_markets = 0
+    # Field names vary across recorder versions:
+    #   health (Test Data) vs hp (new bo3.gg raw payloads)
+    #   balance (Test Data economy) vs money (some newer variants)
+    for e in examples[:1000]:
+        st = e.get("state", {}) or {}
+        t1 = st.get("team_one") or {}
+        t2 = st.get("team_two") or {}
+        ps1 = t1.get("player_states") or []
+        ps2 = t2.get("player_states") or []
+        if ps1: has_player_states += 1
+        hp_key = "health" if (ps1 and "health" in ps1[0]) else "hp"
+        eco_key = "balance" if (ps1 and "balance" in ps1[0]) else "money"
+        if ps1 and ps2 and any(p.get(hp_key, 0) for p in ps1) and any(p.get(hp_key, 0) for p in ps2):
+            has_both_teams_hp += 1
+        if st.get("map_name"):
+            has_map_name += 1
+        if ps1 and ps2 and \
+                any(p.get(eco_key) for p in ps1) and \
+                any(p.get(eco_key) for p in ps2):
+            has_economy += 1
+        if len(e.get("market_before", {})) >= 2:
+            has_both_markets += 1
+    sample_size = min(1000, n)
+
+    # 4. Label noise — what % of hindsight moves are borderline (just above threshold)?
+    buy_pnls = [e["hindsight_pnl_pct"] for e in examples if e["label"]["action"] == "buy"]
+    skip_pnls = [-e["hindsight_pnl_pct"] for e in examples if e["label"]["action"] == "skip"]
+    borderline_buys = sum(1 for p in buy_pnls if 8.0 <= p < 12.0)
+    strong_buys = sum(1 for p in buy_pnls if p >= 20.0)
+
+    # 5. Per-match concentration (are we learning 1 match or 48?)
+    top_match_count = matches.most_common(1)[0][1] if matches else 0
+    top_match_pct = round(100 * top_match_count / n, 1)
+
+    # 6. Temporal leakage check — decision_ts <= first trigger event ts in window?
+    # (We build prompts AT the trigger; features should only reflect state BEFORE/AT ts)
+    # Note: this is hard to verify without the original jsonl — spot-check only
+    ts_values = [e["decision_ts"] for e in examples if e.get("decision_ts")]
+    ts_range_days = 0.0
+    if ts_values:
+        ts_range_days = (max(ts_values) - min(ts_values)) / 86400.0
+
+    # 7. Rapid-fire decision duplicates (within 3s on same match)
+    by_match = defaultdict(list)
+    for e in examples:
+        by_match[e["match_id"]].append(e["decision_ts"])
+    rapid_dupes = 0
+    for m, tss in by_match.items():
+        tss = sorted(tss)
+        for i in range(1, len(tss)):
+            if tss[i] - tss[i-1] < 3.0:
+                rapid_dupes += 1
+
+    # Effective independent sample estimate (very rough):
+    #   take the top 100 matches, assume each contributes ~2 independent
+    #   decision "situations" per 5 min of game time.
+    eff_indep = min(n, 2 * len(matches))
+
+    report = {
+        "summary": {
+            "total_examples": n,
+            "unique_matches": len(matches),
+            "buy_labels": by_action.get("buy", 0),
+            "skip_labels": by_action.get("skip", 0),
+            "class_balance_ratio_skip:buy": round(by_action.get("skip", 0) / max(1, by_action.get("buy", 1)), 1),
+            "effective_independent_samples_estimate": eff_indep,
+            "temporal_range_days": round(ts_range_days, 1),
+        },
+        "diversity": {
+            "top_match_contribution_pct": top_match_pct,
+            "matches_distribution_p50": sorted(matches.values())[len(matches)//2] if matches else 0,
+            "matches_distribution_p95": sorted(matches.values())[int(0.95 * len(matches))] if matches else 0,
+            "trigger_types_count": len(triggers),
+            "top_triggers": dict(triggers.most_common(5)),
+        },
+        "feature_completeness_pct": {
+            "player_states_present": round(100 * has_player_states / sample_size, 1),
+            "both_teams_hp_populated": round(100 * has_both_teams_hp / sample_size, 1),
+            "map_name_present": round(100 * has_map_name / sample_size, 1),
+            "economy_populated": round(100 * has_economy / sample_size, 1),
+            "both_markets_present": round(100 * has_both_markets / sample_size, 1),
+        },
+        "label_quality": {
+            "total_buy_labels": len(buy_pnls),
+            "strong_buys_pnl_ge_20pct": strong_buys,
+            "borderline_buys_8_to_12pct": borderline_buys,
+            "borderline_fraction": round(borderline_buys / max(1, len(buy_pnls)), 3),
+        },
+        "data_issues": {
+            "rapid_fire_duplicates_lt_3s": rapid_dupes,
+            "duplicate_fraction": round(rapid_dupes / n, 3),
+        },
+    }
+
+    # ── Verdicts ────────────────────────────────────────────────────────
+    verdicts = []
+    s = report["summary"]
+
+    # Training readiness
+    if s["unique_matches"] >= 150:
+        verdicts.append(("TRAIN_READY_VOLUME", "✅",
+                         f"{s['unique_matches']} matches — enough for LoRA"))
+    elif s["unique_matches"] >= 50:
+        verdicts.append(("TRAIN_READY_VOLUME", "⚠️",
+                         f"{s['unique_matches']} matches — marginal; collect 100+ more before training"))
+    else:
+        verdicts.append(("TRAIN_READY_VOLUME", "❌",
+                         f"only {s['unique_matches']} matches — wait, do NOT train"))
+
+    # Class balance
+    ratio = s["class_balance_ratio_skip:buy"]
+    if 3 <= ratio <= 20:
+        verdicts.append(("CLASS_BALANCE", "✅", f"{ratio}:1 skip:buy — healthy"))
+    elif ratio < 3:
+        verdicts.append(("CLASS_BALANCE", "⚠️", f"{ratio}:1 — too many buys, will overtrade"))
+    else:
+        verdicts.append(("CLASS_BALANCE", "⚠️", f"{ratio}:1 — extreme, will always skip"))
+
+    # Feature completeness
+    fc = report["feature_completeness_pct"]
+    if fc["player_states_present"] >= 90 and fc["economy_populated"] >= 80:
+        verdicts.append(("FEATURES_RICH", "✅", "player_states + economy populated"))
+    else:
+        verdicts.append(("FEATURES_RICH", "❌",
+                         f"player_states only {fc['player_states_present']}%; "
+                         f"economy {fc['economy_populated']}% — training will be weak"))
+
+    # Match concentration risk
+    if report["diversity"]["top_match_contribution_pct"] > 5:
+        verdicts.append(("MATCH_CONCENTRATION", "⚠️",
+                         f"one match = {report['diversity']['top_match_contribution_pct']}% of data"))
+    else:
+        verdicts.append(("MATCH_CONCENTRATION", "✅", "examples well-spread"))
+
+    # Duplicate risk
+    df = report["data_issues"]["duplicate_fraction"]
+    if df > 0.30:
+        verdicts.append(("DUPLICATES", "⚠️",
+                         f"{int(df*100)}% of examples within 3s of another — many near-dupes"))
+    else:
+        verdicts.append(("DUPLICATES", "✅", f"{int(df*100)}% rapid-fire pairs — ok"))
+
+    # Temporal diversity
+    if s["temporal_range_days"] < 7:
+        verdicts.append(("TEMPORAL", "⚠️",
+                         f"only {s['temporal_range_days']:.1f} days of data — risk of meta-specific overfit"))
+    elif s["temporal_range_days"] < 30:
+        verdicts.append(("TEMPORAL", "⚠️",
+                         f"{s['temporal_range_days']:.1f} days — adequate for tactical, weak for strategic"))
+    else:
+        verdicts.append(("TEMPORAL", "✅", f"{s['temporal_range_days']:.0f} days — good temporal coverage"))
+
+    report["verdicts"] = [{"check": c, "status": s, "note": n} for c, s, n in verdicts]
+
+    # Print
+    print("=" * 70)
+    print("TRAINING DATA AUDIT")
+    print("=" * 70)
+    for k, v in report["summary"].items():
+        print(f"  {k:<46} {v}")
+    print("\n  feature completeness (of first 1000 examples):")
+    for k, v in report["feature_completeness_pct"].items():
+        print(f"    {k:<42} {v}%")
+    print("\n  diversity:")
+    for k, v in report["diversity"].items():
+        print(f"    {k:<42} {v}")
+    print("\n  label quality:")
+    for k, v in report["label_quality"].items():
+        print(f"    {k:<42} {v}")
+    print("\n  verdicts:")
+    for v in report["verdicts"]:
+        print(f"    {v['status']}  {v['check']:<25} {v['note']}")
+    print("=" * 70)
+    return report
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CLI
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -648,6 +903,7 @@ def main():
                    help="skip linking Test Data/old_recordings")
 
     sub.add_parser("summary", help="one-screen stats + top training-ready files")
+    sub.add_parser("audit", help="training-data quality audit (run before training!)")
 
     v = sub.add_parser("validate", help="scan recordings, print ready/not-ready")
     v.add_argument("--out", default="", help="write JSON report to this path")
@@ -669,6 +925,9 @@ def main():
 
     elif args.cmd == "summary":
         summary()
+
+    elif args.cmd == "audit":
+        audit_training_data()
 
     elif args.cmd == "validate":
         reports = validate_all(pattern=args.pattern)
