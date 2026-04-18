@@ -77,3 +77,8 @@ nohup 3.out
 data/training/
 data/archive-*/
 nohup *.out
+
+# Runtime state (written by the live bot)
+data/price_impacts.json
+data/match_state/
+data/*.pkl
