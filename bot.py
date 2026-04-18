@@ -159,6 +159,12 @@ class EsportsBot:
             if game in feed_map:
                 feed = feed_map[game]()
                 feed.on_event(self._on_game_event)
+                # Wire the rich-payload recording hook if the feed supports it.
+                # CS2Bo3Feed (polling) and CS2Bo3WebSocketFeed both expose this
+                # via the GameFeed base class. Other feeds (dota, lol, val)
+                # don't need it yet — their recording path is simpler.
+                if hasattr(feed, 'on_raw_snapshot'):
+                    feed.on_raw_snapshot(self._on_raw_bo3_snapshot)
                 self.feeds[game] = feed
                 logger.info(f"Initialized {game} feed")
 

@@ -362,6 +362,17 @@ class CS2Bo3Feed(GameFeed):
         if not state:
             return 0
 
+        # Emit the FULL bo3.gg payload for recording BEFORE state-diff logic.
+        # This is what the backtester's trigger engine + training pipeline
+        # need: player_states, round_phase, is_bomb_planted, HP, equipment,
+        # round_time, sides, etc. Without this the recorder only sees our
+        # synthesized 8-field MatchState which is useless for backtesting.
+        # (The WS feed at cs2_bo3_ws.py has the same emit.)
+        try:
+            self._emit_raw_snapshot(match_id, snap)
+        except Exception:
+            pass
+
         now = time.time()
         prev = self._last_snapshots.get(match_id)
         self._last_snapshots[match_id] = snap

@@ -82,3 +82,7 @@ nohup *.out
 data/price_impacts.json
 data/match_state/
 data/*.pkl
+
+# Generated: run `python data/processor.py process-all` to regenerate
+data/processed/
+data/training/
