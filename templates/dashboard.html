@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Esports Latency Bot</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0a0a0f; color: #ffffff; padding: 14px; font-size: 12px; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #12121a; border: 1px solid #1e1e2e; border-radius: 6px; margin-bottom: 12px; }
+        .header h1 { font-size: 15px; color: #7c5bf5; }
+        .badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+        .badge-run { background: #1a3a1a; color: #4ade80; }
+        .badge-dry { background: #1a2a3a; color: #60a5fa; }
+        .grid { display: grid; gap: 10px; margin-bottom: 10px; }
+        .g4 { grid-template-columns: repeat(4, 1fr); }
+        .g2 { grid-template-columns: 1fr 1fr; }
+        .card { background: #12121a; border: 1px solid #1e1e2e; border-radius: 6px; padding: 12px; }
+        .card h2 { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        .card.full { grid-column: 1 / -1; }
+        .big { font-size: 20px; font-weight: 700; }
+        .green { color: #4ade80; } .red { color: #f87171; } .blue { color: #60a5fa; }
+        .purple { color: #7c5bf5; } .yellow { color: #fbbf24; } .cyan { color: #22d3ee; }
+        .dim { color: #444; font-size: 10px; }
+        .bar { height: 3px; background: #1e1e2e; border-radius: 2px; margin-top: 4px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+        .chip { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-right: 4px; }
+        .chip-cs2 { background: #2a2a1a; color: #fbbf24; }
+        .chip-dota2 { background: #2a1a1a; color: #f87171; }
+        .chip-lol { background: #1a2a2a; color: #22d3ee; }
+        .chip-valorant { background: #2a1a2a; color: #e879f9; }
+        .chip-on { border: 1px solid #2a5a2a; }
+        .chip-off { border: 1px solid #3a2a2a; opacity: 0.5; }
+        .match { background: #1a1a24; border: 1px solid #2a2a3a; border-radius: 5px; padding: 8px 10px; margin-bottom: 5px; }
+        .match.has-bet { border: 1px solid #ffffff; background: #1e1e2e; }
+        .match-row { display: flex; justify-content: center; align-items: center; gap: 10px; }
+        .match-team { font-weight: 600; font-size: 12px; width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .match-team.right { text-align: right; }
+        .match-score { color: #7c5bf5; font-size: 16px; font-weight: 700; min-width: 40px; text-align: center; flex: 0 0 auto; }
+        .match-meta { font-size: 9px; color: #bbb; margin-top: 2px; }
+        .bet-info { font-size: 10px; color: #fbbf24; margin-top: 3px; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; color: #444; padding: 5px 3px; border-bottom: 1px solid #1e1e2e; font-size: 10px; }
+        td { padding: 5px 3px; border-bottom: 1px solid #141420; }
+        .evt { display: flex; gap: 5px; padding: 4px 0; border-bottom: 1px solid #111118; align-items: center; font-size: 11px; }
+        .evt-time { color: #333; min-width: 50px; font-size: 10px; }
+        .evt-desc { flex: 1; color: #aaa; }
+        .evt-edge { min-width: 55px; text-align: right; font-weight: 600; font-size: 10px; }
+        .evt-mkt { min-width: 80px; text-align: right; font-size: 10px; color: #555; }
+        .faster { color: #4ade80; } /* green = we're faster */
+        .slower { color: #f87171; } /* red = market already moved */
+        .neutral-speed { color: #555; }
+        .no-data { color: #2a2a2a; font-style: italic; padding: 12px; text-align: center; }
+        .scroll { max-height: 300px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>ESPORTS LATENCY BOT</h1>
+        <div><span class="badge" id="mode">---</span> <span class="badge" id="status">---</span></div>
+    </div>
+
+    <div class="grid g4">
+        <div class="card">
+            <h2>Portfolio Value</h2>
+            <div class="big green" id="bal">$1,000.00</div>
+            <div class="dim" id="bal-detail">Cash: $1,000 | Open: $0</div>
+            <div class="bar"><div class="bar-fill" id="bal-bar" style="width:100%;background:#4ade80;"></div></div>
+        </div>
+        <div class="card">
+            <h2>Total P&L</h2>
+            <div class="big" id="pnl">+$0.00</div>
+            <div class="dim" id="pnl-detail">Realized: $0 | Unrealized: $0</div>
+        </div>
+        <div class="card">
+            <h2>Win / Loss</h2>
+            <div class="big yellow" id="wl-record">0W / 0L</div>
+            <div class="dim" id="wl-detail">0 open | $0.00 wagered | 0% fees</div>
+        </div>
+        <div class="card">
+            <h2>Markets / Uptime</h2>
+            <div class="big purple" id="mkts">0</div>
+            <div class="dim" id="uptime">0:00:00</div>
+        </div>
+    </div>
+
+    <div class="grid g2">
+        <div class="card">
+            <h2>Feeds</h2>
+            <div id="feeds"><span class="dim">Connecting...</span></div>
+        </div>
+        <div class="card">
+            <h2>Stats</h2>
+            <div><span class="dim">Trades:</span> <span id="trades">0</span> | <span class="dim">Avg Edge:</span> <span class="green" id="avg-edge">0.000</span> | <span class="dim">Wagered:</span> <span id="wagered">$0</span></div>
+        </div>
+    </div>
+
+    <!-- OPEN POSITIONS -->
+    <div class="card full" style="margin-bottom:10px;">
+        <h2>Open Positions</h2>
+        <div id="positions"><div class="dim">No open positions</div></div>
+    </div>
+
+    <!-- LIVE MATCHES — always at top -->
+    <div class="card full" style="margin-bottom:10px;">
+        <h2>Live Matches</h2>
+        <div id="matches" class="scroll"><div class="no-data">No live matches</div></div>
+    </div>
+
+    <div class="grid g2">
+        <!-- SIGNALS + TRADES -->
+        <div class="card">
+            <h2>Signals & Trades</h2>
+            <div class="scroll">
+                <table>
+                    <thead><tr><th>Team</th><th>Edge</th><th>Conf</th><th>$</th><th>Result</th></tr></thead>
+                    <tbody id="sig-body"></tbody>
+                </table>
+                <div id="no-sig" class="no-data">Waiting for signals...</div>
+            </div>
+        </div>
+
+        <!-- RESOLVED TRADES -->
+        <div class="card">
+            <h2>Resolved Trades</h2>
+            <div class="scroll">
+                <table>
+                    <thead><tr><th>Result</th><th>Strategy</th><th>Team</th><th>Game</th><th>Stake</th><th>Fill Price</th><th>Profit/Loss</th></tr></thead>
+                    <tbody id="resolved-body"></tbody>
+                </table>
+                <div id="no-resolved" class="no-data">No resolved trades yet</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- COUNCIL LIVE VIEW -->
+    <div class="card full" style="margin-top:10px;">
+        <h2>AI Council Live <span class="dim">(11 expert panel decisions in real-time)</span></h2>
+        <div id="council" class="scroll" style="max-height:400px;"><div class="no-data">Waiting for Claude to analyze a match...</div></div>
+    </div>
+
+    <!-- EVENT FEED with latency coloring -->
+    <div class="card full" style="margin-top:10px;">
+        <h2>Event Feed <span class="dim">(green = faster than market, red = market already moved)</span></h2>
+        <div id="events" class="scroll" style="max-height:350px;"><div class="no-data">Waiting for events...</div></div>
+    </div>
+
+    <script>
+        var _expandedPanels = {};
+        function togglePanel(id) {
+            _expandedPanels[id] = !_expandedPanels[id];
+            var el = document.getElementById(id);
+            if (el) el.style.display = _expandedPanels[id] ? 'table-row' : 'none';
+        }
+        function update(d) {
+            if (!d || d.status === 'no_update') return;
+            const ts = d.trade_stats || {};
+            const ls = d.latency_stats || {};
+
+            // Claude API error banner
+            var cs = d.claude_stats || {};
+            var errBanner = document.getElementById('claude-error');
+            if (!errBanner) {
+                errBanner = document.createElement('div');
+                errBanner.id = 'claude-error';
+                errBanner.style.cssText = 'background:#3a1a1a;border:1px solid #f87171;border-radius:6px;padding:8px 14px;margin-bottom:10px;color:#f87171;font-weight:600;font-size:12px;display:none;';
+                document.querySelector('.header').after(errBanner);
+            }
+            if (cs.claude_errors > 2) {
+                errBanner.style.display = 'block';
+                errBanner.textContent = 'CLAUDE AI OFFLINE — ' + (cs.claude_last_error || 'API errors') + ' (' + cs.claude_errors + ' consecutive failures)';
+            } else {
+                errBanner.style.display = 'none';
+            }
+
+            // Badges
+            const s = document.getElementById('status');
+            s.textContent = d.status || '---';
+            s.className = 'badge ' + (d.status === 'running' ? 'badge-run' : '');
+            const m = document.getElementById('mode');
+            m.textContent = d.mode || '---';
+            m.className = 'badge ' + (d.mode === 'LIVE' ? 'badge-run' : 'badge-dry');
+
+            // Balance = confirmed cash only (not including unrealized)
+            const cash = ts.balance || 1000, start = ts.starting_balance || 1000;
+            const openCost = ts.open_cost || 0;
+            const realized = ts.realized_pnl || 0;
+            const bEl = document.getElementById('bal');
+            bEl.textContent = `$${cash.toLocaleString('en',{minimumFractionDigits:2})}`;
+            bEl.className = 'big ' + (cash >= start ? 'green' : 'red');
+            document.getElementById('bal-detail').textContent = `Started: $${start.toFixed(0)} | At risk: $${openCost.toFixed(0)} in ${ts.open_positions||0} bets`;
+            const bp = Math.max(0, Math.min(100, cash/start*100));
+            const bf = document.getElementById('bal-bar');
+            bf.style.width = bp+'%'; bf.style.background = cash>=start ? '#4ade80' : '#f87171';
+
+            // P&L = realized only (confirmed wins/losses)
+            var pnlPct = start > 0 ? ((realized / start) * 100) : 0;
+            const pe = document.getElementById('pnl');
+            pe.textContent = `${realized>=0?'+':''}$${realized.toFixed(2)} (${pnlPct>=0?'+':''}${pnlPct.toFixed(1)}%)`;
+            pe.className = 'big ' + (realized>=0?'green':'red');
+            document.getElementById('pnl-detail').textContent = `Confirmed P&L from ${ts.resolved||0} resolved trades`;
+
+            // Win/Loss
+            const wins = ts.wins||0, losses = ts.losses||0;
+            var winRate = (wins + losses) > 0 ? ((wins / (wins + losses)) * 100).toFixed(1) : '0.0';
+            const wlEl = document.getElementById('wl-record');
+            wlEl.innerHTML = `<span class="green">${wins}W</span> / <span class="red">${losses}L</span> <span class="dim">(${winRate}%)</span>`;
+            const fees = ts.total_fees || 0;
+            document.getElementById('wl-detail').textContent = `${ts.open_positions||0} open | $${(ts.total_wagered||0).toFixed(0)} wagered | $${fees.toFixed(2)} fees`;
+
+            // Open Positions table
+            const trades = ts.recent_trades || [];
+            const openTrades = trades.filter(t => !t.resolved);
+            const closedTrades = trades.filter(t => t.resolved);
+            const posEl = document.getElementById('positions');
+            if (openTrades.length) {
+                posEl.innerHTML = '<table><tr><th>Team</th><th>Game</th><th>Strategy</th><th>Bet</th><th>Fill</th><th>P&L%</th><th>Timer</th><th>Status</th></tr>' +
+                    openTrades.map(function(t, idx) {
+                        var edge = t.edge || 0;
+                        var edgePct = (edge * 100).toFixed(1);
+                        var strat = t.strategy === 'sum_to_one' ? '<span style="color:#22d3ee;">S2O</span>' : t.strategy === 'cross_arb' ? '<span style="color:#f59e0b;">XARB</span>' : '<span style="color:#7c5bf5;">AI</span>';
+                        var panelId = 'analysis-'+idx;
+                        var pnlPct = t.pnl ? (t.pnl / t.amount * 100).toFixed(1) : '0.0';
+                        var pnlColor = t.pnl > 0 ? 'green' : t.pnl < 0 ? 'red' : 'yellow';
+                        var age = t.age || 0;
+                        var timeLeft = Math.max(0, 90 - age);
+                        var timerColor = timeLeft < 15 ? '#f87171' : timeLeft < 30 ? '#fbbf24' : '#4ade80';
+                        var timerStr = '<span style="color:'+timerColor+';">' + Math.round(timeLeft) + 's</span>';
+                        var row = '<tr style="cursor:pointer" onclick="togglePanel(\''+panelId+'\')"><td>' + t.team + '</td><td><span class="chip chip-' + (t.game||'cs2') + '">' + (t.game||'?').toUpperCase() + '</span></td><td>' + strat + '</td><td>$' + t.amount.toFixed(2) + '</td><td>$' + t.fill_price.toFixed(3) + '</td><td class="' + pnlColor + '">' + pnlPct + '%</td><td>' + timerStr + '</td><td class="yellow">OPEN ▾</td></tr>';
+                        var showPanel = _expandedPanels[panelId] ? 'table-row' : 'none';
+                        var a = t.analysis;
+                        if (a && a.expert_votes) {
+                            var betVotes = a.votes || 0;
+                            var skipVotes = (a.expert_votes||[]).length - betVotes;
+                            var voteList = a.expert_votes.map(function(v){
+                                var color = v.vote === 'BET' ? '#4ade80' : '#f87171';
+                                return '<div style="margin:2px 0;font-size:12px;"><span style="color:'+color+';font-weight:bold;">'+v.vote+'</span> <span style="color:#a0a0ff;">'+v.expert+'</span>: <span class="dim">'+v.reason+'</span></div>';
+                            }).join('');
+                            row += '<tr id="'+panelId+'" style="display:'+showPanel+'"><td colspan="8" style="padding:12px 16px;background:#1a1a2e;border-top:1px solid #333;">';
+                            row += '<div style="margin-bottom:8px;"><span class="green">'+betVotes+' BET</span> / <span class="red">'+skipVotes+' SKIP</span> | Confidence: <span class="yellow">'+(a.confidence*100).toFixed(0)+'%</span></div>';
+                            if (a.reasoning) row += '<div style="margin-bottom:8px;font-size:13px;">📋 '+a.reasoning+'</div>';
+                            if (a.dissent) row += '<div style="margin-bottom:8px;font-size:13px;color:#f87171;">⚡ Dissent: '+a.dissent+'</div>';
+                            row += '<div style="border-top:1px solid #333;padding-top:8px;margin-top:4px;">'+voteList+'</div>';
+                            row += '</td></tr>';
+                        } else {
+                            row += '<tr id="'+panelId+'" style="display:'+showPanel+'"><td colspan="8" style="padding:12px;background:#1a1a2e;border-top:1px solid #333;"><span class="dim">No council analysis available for this position</span></td></tr>';
+                        }
+                        return row;
+                    }).join('') + '</table>';
+            } else {
+                posEl.innerHTML = '<div class="dim">No open positions</div>';
+            }
+
+            // Markets + uptime
+            document.getElementById('mkts').textContent = d.markets_tracked || 0;
+            const sec = Math.floor(d.uptime_seconds || 0);
+            document.getElementById('uptime').textContent = `${Math.floor(sec/3600)}:${String(Math.floor((sec%3600)/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;
+
+            // Feeds
+            const fc = d.feeds_connected || {};
+            if (Object.keys(fc).length) {
+                document.getElementById('feeds').innerHTML = Object.entries(fc).map(([g,c]) =>
+                    `<span class="chip chip-${g} ${c?'chip-on':'chip-off'}">${g.toUpperCase()} ${c?'●':'○'}</span>`
+                ).join('');
+            }
+
+            // Stats
+            document.getElementById('trades').textContent = ts.total_trades || 0;
+            document.getElementById('avg-edge').textContent = (ls.avg_edge || 0).toFixed(3);
+            document.getElementById('wagered').textContent = `$${(ts.total_wagered||0).toFixed(2)}`;
+
+            function renderMatch(m) {
+                var g = m.game || 'cs2';
+                var prob = m.win_prob_a || 0.5;
+                var probPct = (prob*100).toFixed(1);
+                var series = 'Map ' + (m.current_map||1) + '/' + (m.total_maps||3);
+                var detail = '';
+                if (g === 'cs2') {
+                    var side = m.side ? m.side.toUpperCase() : '?';
+                    var buy = (m.buy_a && m.buy_a !== 'unknown') ? m.buy_a + ' vs ' + m.buy_b : '';
+                    var money = m.money_a ? '$' + (m.money_a/1000).toFixed(0) + 'k / $' + (m.money_b/1000).toFixed(0) + 'k' : '';
+                    var kills = m.kills || '';
+                    detail = 'Rd: ' + (m.round_score||'0-0') + ' | ' + side;
+                    if (buy) detail += ' | ' + buy;
+                    if (money) detail += ' (' + money + ')';
+                    if (kills && kills !== '0-0') detail += ' | Kills: ' + kills;
+                } else if (g === 'dota2') {
+                    var ka = m.kills_a || 0, kb = m.kills_b || 0;
+                    var mins = m.game_minutes || 0;
+                    detail = 'Kills: <span class="' + (ka>kb?'green':ka<kb?'red':'') + '">' + ka + '</span>-<span class="' + (kb>ka?'green':kb<ka?'red':'') + '">' + kb + '</span>';
+                    if (mins > 0) detail += ' | ' + Math.round(mins) + 'min';
+                    var diff = ka - kb;
+                    if (Math.abs(diff) >= 5) detail += ' | <span class="' + (diff>0?'green':'red') + '">' + (diff>0?'+':'') + diff + ' lead</span>';
+                    if (m.gold_lead) {
+                        var gl = m.gold_lead;
+                        var glStr = (gl > 0 ? '+' : '') + (gl/1000).toFixed(1) + 'k';
+                        detail += ' | Gold: <span class="' + (gl>0?'green':'red') + '">' + glStr + '</span>';
+                    }
+                    if (m.towers_a || m.towers_b) detail += ' | T: ' + (m.towers_a||0) + '-' + (m.towers_b||0);
+                } else if (g === 'lol') {
+                    detail = 'Series: ' + (m.games_score || m.score);
+                    if (m.total_maps) detail += ' (Bo' + m.total_maps + ')';
+                    if (m.gold_a) {
+                        var gd = m.gold_a - m.gold_b;
+                        var gdStr = gd > 0 ? '+' + (gd/1000).toFixed(1) + 'k' : (gd/1000).toFixed(1) + 'k';
+                        detail += ' | Gold: ' + (m.gold_a/1000).toFixed(1) + 'k/' + (m.gold_b/1000).toFixed(1) + 'k <span class="' + (gd>0?'green':'red') + '">(' + gdStr + ')</span>';
+                        detail += ' | K: ' + m.kills_a + '-' + m.kills_b;
+                        if (m.dragons_a || m.dragons_b) detail += ' | D: ' + m.dragons_a + '-' + m.dragons_b;
+                        if (m.barons_a || m.barons_b) detail += ' | Baron: ' + m.barons_a + '-' + m.barons_b;
+                        if (m.towers_a || m.towers_b) detail += ' | T: ' + m.towers_a + '-' + m.towers_b;
+                    }
+                } else if (g === 'valorant') {
+                    detail = 'Maps: ' + (m.maps_score || m.score);
+                    if (m.total_maps) detail += ' (Bo' + m.total_maps + ')';
+                    if (m.round_score) detail += ' | Rd: ' + m.round_score;
+                }
+                var startTime = '';
+                if (m.started_at) {
+                    var dt = new Date(m.started_at * 1000);
+                    var now = new Date();
+                    var elapsed = Math.floor((now - dt) / 60000);
+                    var hh = dt.getHours().toString().padStart(2, '0');
+                    var mm2 = dt.getMinutes().toString().padStart(2, '0');
+                    var dateStr = dt.toDateString() === now.toDateString() ? '' : (dt.getMonth()+1) + '/' + dt.getDate() + ' ';
+                    startTime = dateStr + hh + ':' + mm2 + ' (' + elapsed + 'm ago)';
+                }
+                var betHtml = '';
+                var betClass = '';
+                if (m.has_bet) {
+                    betClass = ' has-bet';
+                    var bets = m.bets || [];
+                    var betLines = bets.map(function(b) {
+                        var edgePct = b.edge ? (b.edge*100).toFixed(1) + '% edge' : '';
+                        return '$' + b.amount.toFixed(2) + ' on ' + b.team + ' @' + b.fill.toFixed(3) + ' (' + (b.conf*100).toFixed(0) + '% conf' + (edgePct ? ', ' + edgePct : '') + ')';
+                    }).join(' | ');
+                    var matchPanelId = 'match-analysis-' + (m.match_id || '').replace(/[^a-zA-Z0-9]/g, '_');
+                    var hasAnalysis = bets.some(function(b){ return b.analysis && b.analysis.expert_votes; });
+                    betHtml = '<div class="bet-info" style="cursor:' + (hasAnalysis ? 'pointer' : 'default') + ';" ' +
+                        (hasAnalysis ? 'onclick="togglePanel(\'' + matchPanelId + '\')"' : '') + '>' +
+                        'BETS: ' + betLines + ' — Total: $' + m.bet_total.toFixed(2) +
+                        (hasAnalysis ? ' <span style="color:#7c5bf5;font-size:10px;">▾ COUNCIL</span>' : '') +
+                        '</div>';
+                    if (hasAnalysis) {
+                        var showMatchPanel = _expandedPanels[matchPanelId] ? 'block' : 'none';
+                        betHtml += '<div id="' + matchPanelId + '" style="display:' + showMatchPanel + ';background:#1a1a2e;border:1px solid #333;border-radius:5px;padding:10px 12px;margin-top:4px;">';
+                        for (var bi = 0; bi < bets.length; bi++) {
+                            var ba = bets[bi].analysis;
+                            if (!ba || !ba.expert_votes) continue;
+                            if (bets.length > 1) betHtml += '<div style="font-size:11px;color:#7c5bf5;font-weight:600;margin-bottom:4px;">Bet on ' + bets[bi].team + '</div>';
+                            var bBet = ba.votes || 0;
+                            var bSkip = (ba.expert_votes||[]).length - bBet;
+                            betHtml += '<div style="margin-bottom:6px;"><span class="green">' + bBet + ' BET</span> / <span class="red">' + bSkip + ' SKIP</span> | Confidence: <span class="yellow">' + (ba.confidence*100).toFixed(0) + '%</span></div>';
+                            if (ba.reasoning) betHtml += '<div style="font-size:12px;margin-bottom:4px;">📋 ' + ba.reasoning + '</div>';
+                            if (ba.dissent) betHtml += '<div style="font-size:12px;color:#f87171;margin-bottom:6px;">⚡ Dissent: ' + ba.dissent + '</div>';
+                            betHtml += '<div style="border-top:1px solid #333;padding-top:6px;">';
+                            ba.expert_votes.forEach(function(v) {
+                                var vc = v.vote === 'BET' ? '#4ade80' : '#f87171';
+                                betHtml += '<div style="margin:2px 0;font-size:11px;"><span style="color:' + vc + ';font-weight:bold;">' + v.vote + '</span> <span style="color:#a0a0ff;">' + v.expert + '</span>: <span class="dim">' + v.reason + '</span></div>';
+                            });
+                            betHtml += '</div>';
+                        }
+                        betHtml += '</div>';
+                    }
+                }
+                var priorHtml = m.prior ? ' | Prior: ' + (m.prior*100).toFixed(0) + '% <span class="dim">(' + (m.prior_source||'market') + ')</span>' : '';
+                var teamA = m.team_a || '?';
+                var teamB = m.team_b || '?';
+
+                // Build prop bets section
+                var propHtml = '';
+                if (m.prop_markets && m.prop_markets.length > 0) {
+                    propHtml = '<div style="margin-top:4px;border-top:1px solid #2a2a3a;padding-top:3px;">';
+                    propHtml += '<span style="font-size:9px;color:#22d3ee;font-weight:600;">PROP BETS</span>';
+                    for (var pi = 0; pi < m.prop_markets.length; pi++) {
+                        var prop = m.prop_markets[pi];
+                        propHtml += '<div style="font-size:10px;color:#bbb;margin-top:2px;">' +
+                            prop.question + ' — ' +
+                            '<span class="green">' + prop.team_a + ' ' + (prop.price_a*100).toFixed(0) + '%</span>' +
+                            ' / <span class="red">' + prop.team_b + ' ' + (prop.price_b*100).toFixed(0) + '%</span>' +
+                            ' <span class="dim">(vol $' + (prop.volume > 1000 ? (prop.volume/1000).toFixed(0) + 'k' : prop.volume) + ')</span>' +
+                            '</div>';
+                    }
+                    propHtml += '</div>';
+                }
+
+                var upcomingBadge = m.upcoming ? '<span style="background:#7c3aed;color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;">UPCOMING</span>' : '';
+                var html = '<div class="match' + betClass + '">' +
+                    '<div class="match-row">' +
+                        '<span class="match-team">' + teamA + '</span>' +
+                        '<span class="match-score">' + (m.upcoming ? 'vs' : m.score) + '</span>' +
+                        '<span class="match-team right">' + teamB + '</span>' +
+                        upcomingBadge +
+                    '</div>' +
+                    '<div class="match-meta">' +
+                        '<span class="chip chip-' + g + '">' + g.toUpperCase() + '</span> ' +
+                        (startTime ? '<span class="dim">' + startTime + '</span> | ' : '') +
+                        series + ' | ' + detail + ' | P(' + teamA.split(' ')[0] + '): ' + probPct + '%' + priorHtml +
+                        (m.stream_url ? ' | <a href="' + m.stream_url + '" target="_blank" style="color:#7c5bf5;text-decoration:none;font-weight:600;">WATCH</a>' : '') +
+                        (m.watch_url ? ' | <a href="' + m.watch_url + '" style="color:#60a5fa;text-decoration:none;font-weight:600;">LAUNCH GAME</a>' : '') +
+                        (m.bo3gg_url ? ' | <a href="' + m.bo3gg_url + '" target="_blank" style="color:#fbbf24;text-decoration:none;font-weight:600;">STATS</a>' : '') +
+                        (m.polymarket_url ? ' | <a href="' + m.polymarket_url + '" target="_blank" style="color:#4ade80;text-decoration:none;font-weight:600;">POLYMARKET</a>' : '') +
+                    '</div>' +
+                    betHtml +
+                    propHtml;
+
+                // Claude decision reason (why no bet)
+                if (m.decision && !m.has_bet) {
+                    var dec = m.decision;
+                    var decColor = dec.action === 'skip' ? '#f87171' : dec.action === 'no_market' ? '#555' : '#fbbf24';
+                    var votesStr = dec.votes > 0 ? dec.votes + '/11 voted BET | ' : '';
+                    html += '<div style="font-size:10px;color:' + decColor + ';margin-top:3px;border-top:1px solid #1e1e2e;padding-top:3px;word-wrap:break-word;">';
+                    html += '<span style="font-weight:600;">PANEL: </span>';
+                    html += votesStr + dec.reason;
+                    if (dec.dissent) html += '<br><span class="dim">Dissent: ' + dec.dissent + '</span>';
+                    html += '</div>';
+                }
+
+                return html + '</div>';
+            }
+
+            // LIVE MATCHES — split into bet matches (top) and other matches
+            const md = document.getElementById('matches');
+            const am = d.active_matches || [];
+            if (am.length) {
+                var betMatches = am.filter(function(m) { return m.has_bet; });
+                var otherMatches = am.filter(function(m) { return !m.has_bet; });
+                var sortedMatches = betMatches.concat(otherMatches);
+                var hasDivider = betMatches.length > 0 && otherMatches.length > 0;
+
+                var html = '';
+                if (betMatches.length > 0) {
+                    html += '<div style="margin-bottom:4px;"><span style="font-size:9px;color:#fbbf24;font-weight:600;">ACTIVE BETS</span></div>';
+                }
+                for (var idx = 0; idx < sortedMatches.length; idx++) {
+                    if (hasDivider && idx === betMatches.length) {
+                        html += '<div style="border-top:1px solid #333;margin:8px 0;padding-top:4px;"><span class="dim" style="font-size:9px;">OTHER LIVE MATCHES</span></div>';
+                    }
+                    html += renderMatch(sortedMatches[idx]);
+                }
+                md.innerHTML = html;
+            } else { md.innerHTML = '<div class="no-data">No live matches</div>'; }
+
+            // SIGNALS
+            const sigs = d.recent_signals || [];
+            const sb = document.getElementById('sig-body');
+            const ns = document.getElementById('no-sig');
+            if (sigs.length) {
+                ns.style.display = 'none';
+                sb.innerHTML = sigs.slice().reverse().slice(0,10).map(s => `
+                    <tr>
+                        <td>${s.team}</td>
+                        <td class="${s.edge>0?'green':'red'}">${s.edge>0?'+':''}${s.edge.toFixed(3)}</td>
+                        <td>${(s.confidence*100).toFixed(0)}%</td>
+                        <td>$${s.amount.toFixed(0)}</td>
+                        <td class="dim">${s.our_price.toFixed(2)} vs ${s.market_price.toFixed(2)}</td>
+                    </tr>`).join('');
+            }
+
+            // RESOLVED TRADES
+            const rb = document.getElementById('resolved-body');
+            const nr = document.getElementById('no-resolved');
+            if (closedTrades.length) {
+                nr.style.display = 'none';
+                rb.innerHTML = closedTrades.slice().reverse().map(function(t, idx) {
+                    var pnl = t.pnl || 0;
+                    var pl = '<span class="' + (pnl>=0?'green':'red') + '">' + (pnl>=0?'+':'') + '$' + pnl.toFixed(2) + '</span>';
+                    var strat = t.strategy === 'sum_to_one' ? '<span style="color:#22d3ee;">S2O</span>' : t.strategy === 'cross_arb' ? '<span style="color:#f59e0b;">XARB</span>' : '<span style="color:#7c5bf5;">AI</span>';
+                    // Exit reason badge
+                    var exitBadge = '';
+                    var er = t.exit_reason || '';
+                    if (er === 'take_profit') exitBadge = '<span style="background:#065f46;color:#4ade80;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;">TP</span> ';
+                    else if (er === 'stop_loss') exitBadge = '<span style="background:#7f1d1d;color:#f87171;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;">SL</span> ';
+                    else if (er === 'time_exit') exitBadge = '<span style="background:#78350f;color:#fbbf24;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;">TIME</span> ';
+                    else exitBadge = '<span style="background:#1e3a5f;color:#60a5fa;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;">RES</span> ';
+                    var rPanelId = 'resolved-analysis-'+idx;
+                    var row = '<tr style="cursor:pointer" onclick="togglePanel(\''+rPanelId+'\')"><td>'+exitBadge+pl+'</td><td>'+strat+'</td><td>'+t.team+'</td><td><span class="chip chip-'+(t.game||'cs2')+'">'+(t.game||'?').toUpperCase()+'</span></td><td>$'+t.amount.toFixed(2)+'</td><td>$'+t.fill_price.toFixed(3)+'</td><td>'+pl+' ▾</td></tr>';
+                    var rShowPanel = _expandedPanels[rPanelId] ? 'table-row' : 'none';
+                    var a = t.analysis;
+                    if (a && a.expert_votes) {
+                        var betVotes = a.votes || 0;
+                        var skipVotes = (a.expert_votes||[]).length - betVotes;
+                        var voteList = a.expert_votes.map(function(v){
+                            var color = v.vote === 'BET' ? '#4ade80' : '#f87171';
+                            return '<div style="margin:2px 0;font-size:12px;"><span style="color:'+color+';font-weight:bold;">'+v.vote+'</span> <span style="color:#a0a0ff;">'+v.expert+'</span>: <span class="dim">'+v.reason+'</span></div>';
+                        }).join('');
+                        row += '<tr id="'+rPanelId+'" style="display:'+rShowPanel+'"><td colspan="7" style="padding:12px 16px;background:#1a1a2e;border-top:1px solid #333;">';
+                        row += '<div style="margin-bottom:8px;"><span class="green">'+betVotes+' BET</span> / <span class="red">'+skipVotes+' SKIP</span> | Confidence: <span class="yellow">'+(a.confidence*100).toFixed(0)+'%</span></div>';
+                        if (a.reasoning) row += '<div style="margin-bottom:8px;font-size:13px;">📋 '+a.reasoning+'</div>';
+                        if (a.dissent) row += '<div style="margin-bottom:8px;font-size:13px;color:#f87171;">⚡ Dissent: '+a.dissent+'</div>';
+                        row += '<div style="border-top:1px solid #333;padding-top:8px;margin-top:4px;">'+voteList+'</div>';
+                        row += '</td></tr>';
+                    } else {
+                        row += '<tr id="'+rPanelId+'" style="display:'+rShowPanel+'"><td colspan="7" style="padding:12px;background:#1a1a2e;border-top:1px solid #333;"><span class="dim">No council analysis available (position loaded from DB)</span></td></tr>';
+                    }
+                    return row;
+                }).join('');
+            } else { nr.style.display = ''; }
+
+            // COUNCIL LIVE VIEW
+            var councilEl = document.getElementById('council');
+            var analyses = (d.claude_stats || {}).claude_analyses || [];
+            if (analyses.length > 0) {
+                var councilHtml = '';
+                for (var ai = analyses.length - 1; ai >= 0; ai--) {
+                    var a = analyses[ai];
+                    var aTime = new Date(a.time * 1000);
+                    var aTs = aTime.getHours().toString().padStart(2,'0') + ':' + aTime.getMinutes().toString().padStart(2,'0');
+                    var actionColor = a.action === 'bet' ? '#4ade80' : '#f87171';
+                    var actionLabel = a.action === 'bet' ? 'BET' : 'SKIP';
+
+                    councilHtml += '<div style="background:#1a1a24;border:1px solid ' + (a.action === 'bet' ? '#2a5a2a' : '#3a2a2a') + ';border-radius:5px;padding:8px 10px;margin-bottom:6px;">';
+                    councilHtml += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+                    councilHtml += '<span><span class="chip chip-' + a.game + '">' + a.game.toUpperCase() + '</span> ' + a.team_a + ' vs ' + a.team_b + '</span>';
+                    councilHtml += '<span style="color:' + actionColor + ';font-weight:700;">' + a.bet_votes + '/11 ' + actionLabel + ' (' + (a.confidence * 100).toFixed(0) + '%)</span>';
+                    councilHtml += '</div>';
+                    councilHtml += '<div style="font-size:11px;color:#bbb;margin-top:4px;">' + a.reasoning + '</div>';
+                    if (a.dissent) {
+                        councilHtml += '<div style="font-size:10px;color:#f87171;margin-top:2px;">Dissent: ' + a.dissent + '</div>';
+                    }
+
+                    // Individual expert votes
+                    if (a.votes && a.votes.length > 0) {
+                        councilHtml += '<div style="margin-top:4px;border-top:1px solid #2a2a3a;padding-top:4px;font-size:10px;">';
+                        for (var vi = 0; vi < a.votes.length; vi++) {
+                            var v = a.votes[vi];
+                            var vColor = v.vote === 'BET' ? '#4ade80' : '#f87171';
+                            councilHtml += '<div style="margin-top:1px;"><span style="color:' + vColor + ';font-weight:600;">' + v.vote + '</span> <span style="color:#888;">' + v.expert + ':</span> <span style="color:#aaa;">' + v.reason + '</span></div>';
+                        }
+                        councilHtml += '</div>';
+                    }
+
+                    councilHtml += '<div class="dim" style="margin-top:3px;font-size:9px;">' + aTs + ' | edge=' + (a.edge * 100).toFixed(1) + '% | API cost $' + a.cost.toFixed(4) + '</div>';
+                    councilHtml += '</div>';
+                }
+                councilEl.innerHTML = councilHtml;
+            }
+
+            // EVENT FEED — split bet events to top, only show bettable matches
+            var ef = document.getElementById('events');
+            var evts = d.recent_events || [];
+            if (evts.length) {
+                var reversed = evts.slice().reverse().slice(0, 50);
+                var betEvts = reversed.filter(function(e) { return e.has_bet; });
+                var otherEvts = reversed.filter(function(e) { return !e.has_bet; });
+
+                function renderEvt(e) {
+                    var t = new Date(e.time * 1000);
+                    var ts3 = t.getHours().toString().padStart(2, '0') + ':' + t.getMinutes().toString().padStart(2, '0') + ':' + t.getSeconds().toString().padStart(2, '0');
+                    var speedClass = 'neutral-speed';
+                    var speedLabel = '';
+                    if (e.faster === true) { speedClass = 'faster'; speedLabel = 'FASTER'; }
+                    else if (e.faster === false) { speedClass = 'slower'; speedLabel = 'PRICED'; }
+                    else { speedLabel = '~'; }
+                    var edgeStr = '<span class="' + (e.edge > 0 ? 'green' : 'red') + '">' + (e.edge > 0 ? '+' : '') + e.edge.toFixed(3) + '</span>';
+                    var mktStr = e.our_prob.toFixed(2) + ' vs ' + e.market_prob.toFixed(2);
+                    var border = e.has_bet ? 'border-left:2px solid #fff;padding-left:6px;' : '';
+                    return '<div class="evt" style="' + border + '"><span class="chip chip-' + e.game + '">' + e.game.toUpperCase() + '</span><span class="evt-time">' + ts3 + '</span><span class="evt-desc">' + e.description + '</span><span class="evt-edge">' + edgeStr + '</span><span class="evt-mkt">' + mktStr + '</span><span class="evt-edge ' + speedClass + '">' + speedLabel + '</span></div>';
+                }
+
+                var html = '';
+                if (betEvts.length > 0) {
+                    html += '<div style="margin-bottom:4px;"><span style="font-size:9px;color:#fbbf24;font-weight:600;">ACTIVE BET EVENTS</span></div>';
+                    for (var i = 0; i < Math.min(betEvts.length, 15); i++) html += renderEvt(betEvts[i]);
+                    if (otherEvts.length > 0) html += '<div style="border-top:1px solid #333;margin:6px 0;padding-top:4px;"><span class="dim" style="font-size:9px;">OTHER EVENTS</span></div>';
+                }
+                for (var j = 0; j < Math.min(otherEvts.length, 30); j++) html += renderEvt(otherEvts[j]);
+                ef.innerHTML = html;
+            }
+        }
+
+        // --- Poll for updates every 2 seconds ---
+        function poll() {
+            fetch('/api/state')
+                .then(function(r) { return r.json(); })
+                .then(function(d) { update(d); })
+                .catch(function(e) {});
+        }
+        poll();
+        setInterval(poll, 2000);
+    </script>
+</body>
+</html>

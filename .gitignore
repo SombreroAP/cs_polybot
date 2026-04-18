@@ -1,0 +1,74 @@
+# Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+venv/
+.venv/
+env/
+
+# Trade & market data (big + sensitive)
+data/recordings/
+data/trades.db*
+data/edge_trades.db*
+*.sqlite
+*.sqlite3
+replay_backtest_results/
+
+# Logs
+_logs/*
+# ...but we DO want to preserve prompt-iteration history in git (small .py files).
+!_logs/.gitkeep
+!_logs/edge_analyst.iter1.py
+!_logs/edge_analyst.iter2.py
+!_logs/edge_analyst.iter3.py
+!_logs/edge_analyst.iter3b.py
+!_logs/edge_analyst.iter4.py
+!_logs/edge_analyst.iter5.py
+!_logs/edge_analyst.iter7.py
+!_logs/edge_analyst.iter8.py
+!_logs/edge_analyst.iter8_frozen.py
+!_logs/edge_analyst.iter9_minimal.py
+*.log
+nohup.out
+
+# Historical / test corpora (not needed on VPS, not worth version-control bulk)
+Test Data/
+_audit/snapshots/
+_audit/shootout_archive/
+
+# OS / editor cruft
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local tooling + scratch
+/tmp/
+tmp/
+/scratch/
+
+# Large binary model artifacts (if ever downloaded locally)
+*.gguf
+*.safetensors
+*.bin
+
+# Claude Code session artifacts (not for sharing)
+.claude/
+.pause_analyzer
+.wrapper.pid
+_monitor.out
+nohup.out.*

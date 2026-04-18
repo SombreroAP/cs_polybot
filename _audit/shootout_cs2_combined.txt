@@ -1,0 +1,304 @@
+Test Data/old_recordings/117626_ALZON_vs_R2_1776113833.jsonl
+Test Data/114228_Ex_Ruby_vs_State_converted.jsonl
+Test Data/117264_Dxa_Esports_vs_Arcade_converted.jsonl
+Test Data/old_recordings/117632_Vasco_vs_Crashers_1776210054.jsonl
+Test Data/117153_Saw_vs_Wazabi_converted.jsonl
+Test Data/old_recordings/117085_FURIA_vs_Natus_Vincere_1776191167.jsonl
+Test Data/old_recordings/117077_RED_Canids_vs_Gentle_Mates_1776171339.jsonl
+Test Data/old_recordings/116757_Legacy_vs_MOUZ_1776104797.jsonl
+Test Data/117104_Zotix_vs_Vexar_converted.jsonl
+Test Data/old_recordings/117222_Imperial_Academy_vs_Fire_Flux_merged.jsonl
+Test Data/117159_Sashi_Academy_vs_Saw_converted.jsonl
+Test Data/117263_Arcade_vs_Abyssal_converted.jsonl
+Test Data/old_recordings/117628_QUINTESSENCIA_vs_MIBR_Academy_1776123625.jsonl
+Test Data/old_recordings/116758_Aurora_vs_HOTU_1776111968.jsonl
+Test Data/old_recordings/archive/no-fresh-book/117370_R2_vs_METANOIA_Wolves_1776028259.jsonl
+Test Data/old_recordings/116759_B8_vs_Natus_Vincere_1776103005.jsonl
+Test Data/old_recordings/116924_Marsborne_vs_Aether_1776115532.jsonl
+Test Data/old_recordings/116760_FURIA_vs_Passion_UA_1776112994.jsonl
+Test Data/old_recordings/117086_Passion_UA_vs_B8_1776190869.jsonl
+Test Data/old_recordings/archive/no-fresh-book/116919_Voca_vs_Akimbo_1776039926.jsonl
+Test Data/117154_Entropy_Gaming_vs_Olgod_Efterskole_converted.jsonl
+Test Data/117218_Fire_Flux_vs_Lph_Gaming_converted.jsonl
+Test Data/old_recordings/117221_Misa_vs_Inner_Circle_Academy_1776066934.jsonl
+Test Data/old_recordings/114232_Phantom_vs_HEROIC_Academy_1776066934.jsonl
+Test Data/old_recordings/116923_Voca_vs_regain_1776128696.jsonl
+Test Data/old_recordings/114235_Phantom_vs_Metizport_1776164552.jsonl
+Test Data/old_recordings/117224_Misa_vs_Fire_Flux_1776164552.jsonl
+Test Data/old_recordings/116755_3DMAX_vs_Falcons_1776099411.jsonl
+Test Data/old_recordings/117223_BRUTE_vs_Young_Ninjas_1776159026.jsonl
+Test Data/old_recordings/117604_QUAZAR_vs_VP.Prodigy_1776099411.jsonl
+Test Data/old_recordings/archive/117157_Entropy_Gaming_vs_Wazabi_converted.jsonl
+Test Data/old_recordings/116756_Spirit_vs_Liquid_1776099411.jsonl
+data/recordings/mkt_1842278_Aurora_Gaming_vs_HOTU_2026-04-13.jsonl
+data/recordings/mkt_1978578_Glitchtech_Esports_vs_eLITenergy_2026-04-15.jsonl
+data/recordings/117370_R2_vs_METANOIA_Wolves_2026-04-13.jsonl
+data/recordings/117620_ZOTIX_vs_SINQU_2026-04-13.jsonl
+data/recordings/mkt_1977374_regain_vs_EMPIRE_2026-04-15.jsonl
+data/recordings/mkt_1962494_Brute_vs_Young_Ninjas_2026-04-13.jsonl
+data/recordings/mkt_1997737_Young_Ninjas_vs_TNC_2026-04-16.jsonl
+data/recordings/mkt_1929853_FURIA_vs_GamerLegion_2026-04-16.jsonl
+data/recordings/117090_Aurora_vs_B8_2026-04-15.jsonl
+data/recordings/117085_FURIA_vs_Natus_Vincere_2026-04-14.jsonl
+data/recordings/mkt_1974863_fnatic_vs_EYEBALLERS_2026-04-14.jsonl
+data/recordings/mkt_1997768_Tricked_vs_Johnny_Speeds_2026-04-16.jsonl
+data/recordings/117609_DGK_vs_Fire_Flux_2026-04-13.jsonl
+data/recordings/mkt_1971852_Procyon_Gaming_vs_METANOIA_WOLVES_2026-04-14.jsonl
+data/recordings/mkt_1975707_MOUZ_vs_Aurora_Gaming_2026-04-14.jsonl
+data/recordings/mkt_1842289_Legacy_vs_MOUZ_2026-04-13.jsonl
+data/recordings/mkt_1981786_insane_players_vs_Team_Aether_2026-04-15.jsonl
+data/recordings/mkt_1977522_3DMAX_Academy_vs_Wingman_2026-04-14.jsonl
+data/recordings/117599_VP.Future_vs_Z7_2026-04-13.jsonl
+data/recordings/mkt_1978769_Voca_vs_Marsborne_2026-04-15.jsonl
+data/recordings/mkt_1997757_KOLESIE_vs_Alliance_2026-04-16.jsonl
+data/recordings/116861_ESC_vs_Ursa_2026-04-16.jsonl
+data/recordings/117482_fnatic_vs_EYEBALLERS_2026-04-14.jsonl
+data/recordings/116856_Acend_vs_Ursa_2026-04-15.jsonl
+data/recordings/mkt_1929853_FURIA_vs_GamerLegion_2026-04-14.jsonl
+data/recordings/117084_Vitality_vs_Falcons_2026-04-15.jsonl
+data/recordings/mkt_1967106_ZOTIX_vs_SINQU_2026-04-13.jsonl
+data/recordings/mkt_1967072_Clutchain_Female_vs_QUAZAR_2026-04-13.jsonl
+data/recordings/mkt_1976027_CYBERSHOKE_Esports_vs_Oxuji_Esports_2026-04-15.jsonl
+data/recordings/mkt_1986901_B8_vs_Aurora_Gaming_2026-04-15.jsonl
+data/recordings/116920_Zomblers_vs_regain_2026-04-13.jsonl
+data/recordings/117082_Spirit_vs_RED_Canids_2026-04-15.jsonl
+data/recordings/mkt_1971181_Vexa_vs_MAGICOS_2026-04-14.jsonl
+data/recordings/mkt_1971817_Misa_Esports_vs_Fire_Flux_Esports_2026-04-13.jsonl
+data/recordings/mkt_1971839_ALKA_vs_HereWeGoAgain_2026-04-14.jsonl
+data/recordings/mkt_1989470_Partizan_Esport_vs_INFURITY_Gaming_2026-04-15.jsonl
+data/recordings/mkt_1969225_Phantom_vs_Metizport_2026-04-13.jsonl
+data/recordings/mkt_1964127_Eternal_Fire_Academy_vs_NeverPlay_2026-04-13.jsonl
+data/recordings/mkt_1990792_QUINTESSÊNCIA_vs_ALKA_2026-04-15.jsonl
+data/recordings/mkt_1967122_Haunted_House_vs_XI_Esport_2026-04-13.jsonl
+data/recordings/117223_BRUTE_vs_Young_Ninjas_2026-04-14.jsonl
+data/recordings/mkt_1978416_XI_Esport_vs_FC_Famalicão_Esports_2026-04-14.jsonl
+data/recordings/mkt_1963323_ARCRED_vs_Lavked_2026-04-14.jsonl
+data/recordings/114236_Lavked_vs_Phantom_2026-04-15.jsonl
+data/recordings/mkt_1981850_ARCRED_vs_Metizport_2026-04-14.jsonl
+data/recordings/mkt_1974880_B8_vs_Passion_UA_2026-04-14.jsonl
+data/recordings/117483_Young_Ninjas_vs_Tricked_2026-04-14.jsonl
+data/recordings/117606_G2_Ares_vs_JUMBO_2026-04-13.jsonl
+data/recordings/mkt_1971829_Fake_do_Biru_vs_paiN_Academy_2026-04-14.jsonl
+data/recordings/mkt_1981850_ARCRED_vs_Metizport_2026-04-16.jsonl
+data/recordings/117734_Drama_vs_eternal_premium_2026-04-16.jsonl
+data/recordings/mkt_1974897_TNC_vs_Sashi_Esport_2026-04-15.jsonl
+data/recordings/mkt_1989492_LPH_Gaming_vs_Eternal_Fire_Academy_2026-04-15.jsonl
+data/recordings/mkt_1984578_RED_Canids_vs_Spirit_2026-04-14.jsonl
+data/recordings/mkt_1997746_Sinners_vs_Sashi_Esport_2026-04-16.jsonl
+data/recordings/mkt_1989481_Phantom_Academy_vs_Hermine_Esports_Club_2026-04-15.jsonl
+data/recordings/mkt_1976038_TDK_vs_MANA_eSports_2026-04-15.jsonl
+data/recordings/mkt_1971181_Vexa_vs_MAGICOS_2026-04-16.jsonl
+data/recordings/117087_HOTU_vs_Legacy_2026-04-14.jsonl
+data/recordings/116852_MOUZ_NXT_vs_GenOne_2026-04-14.jsonl
+data/recordings/mkt_1997652_Alzon_vs_FURIA_fe_2026-04-16.jsonl
+data/recordings/mkt_1994725_Acend_vs_Favbet_2026-04-16.jsonl
+data/recordings/117610_Banger_Gang_vs_Peekaboo_2026-04-13.jsonl
+data/recordings/117226_Young_Ninjas_vs_Fire_Flux_2026-04-16.jsonl
+data/recordings/mkt_1981806_Lavked_vs_Phantom_2026-04-15.jsonl
+data/recordings/mkt_1842256_FURIA_vs_Passion_UA_2026-04-13.jsonl
+data/recordings/117619_Haunted_House_vs_XI_2026-04-13.jsonl
+data/recordings/mkt_1971829_Fake_do_Biru_vs_paiN_Academy_2026-04-13.jsonl
+data/recordings/mkt_1978769_Voca_vs_Marsborne_2026-04-14.jsonl
+data/recordings/mkt_1978409_Misa_Esports_vs_Aurora_Young_Blood_2026-04-14.jsonl
+data/recordings/mkt_1981786_insane_players_vs_Team_Aether_2026-04-14.jsonl
+data/recordings/mkt_1976027_CYBERSHOKE_Esports_vs_Oxuji_Esports_2026-04-14.jsonl
+data/recordings/mkt_1994703_Phantom_vs_GenOne_2026-04-16.jsonl
+data/recordings/mkt_1978578_Glitchtech_Esports_vs_eLITenergy_2026-04-16.jsonl
+data/recordings/mkt_1929853_FURIA_vs_GamerLegion_2026-04-15.jsonl
+data/recordings/mkt_1989709_RoundsGG_vs_Aurora_Young_Blood_2026-04-15.jsonl
+data/recordings/mkt_1989706_Glitchtech_Esports_vs_Imperial_Academy_2026-04-15.jsonl
+data/recordings/117078_Vitality_vs_G2_2026-04-14.jsonl
+data/recordings/mkt_1994746_CYBERSHOKE_Esports_vs_MANA_eSports_2026-04-16.jsonl
+data/recordings/mkt_1977374_regain_vs_EMPIRE_2026-04-14.jsonl
+data/recordings/mkt_1978578_Glitchtech_Esports_vs_eLITenergy_2026-04-14.jsonl
+data/recordings/117086_Passion_UA_vs_B8_2026-04-14.jsonl
+data/recordings/114232_Phantom_vs_HEROIC_Academy_2026-04-13.jsonl
+data/recordings/mkt_1971181_Vexa_vs_MAGICOS_2026-04-13.jsonl
+data/recordings/mkt_1971817_Misa_Esports_vs_Fire_Flux_Esports_2026-04-14.jsonl
+data/recordings/117222_Imperial_Academy_vs_Fire_Flux_2026-04-13.jsonl
+data/recordings/mkt_1969225_Phantom_vs_Metizport_2026-04-14.jsonl
+data/recordings/mkt_1971839_ALKA_vs_HereWeGoAgain_2026-04-13.jsonl
+data/recordings/mkt_1964127_Eternal_Fire_Academy_vs_NeverPlay_2026-04-14.jsonl
+data/recordings/116862_1win_vs_Nuclear_TigeRES_2026-04-16.jsonl
+data/recordings/mkt_1971852_Procyon_Gaming_vs_METANOIA_WOLVES_2026-04-15.jsonl
+data/recordings/mkt_1975707_MOUZ_vs_Aurora_Gaming_2026-04-15.jsonl
+data/recordings/116755_3DMAX_vs_Falcons_2026-04-13.jsonl
+data/recordings/117085_FURIA_vs_Natus_Vincere_2026-04-15.jsonl
+data/recordings/mkt_1963323_ARCRED_vs_Lavked_2026-04-13.jsonl
+data/recordings/mkt_1994655_ESC_Gaming_vs_Ursa_2026-04-16.jsonl
+data/recordings/mkt_1974897_TNC_vs_Sashi_Esport_2026-04-14.jsonl
+data/recordings/mkt_1989718_QUAZAR_vs_PURE_2026-04-15.jsonl
+data/recordings/mkt_1967142_ZOTIX_vs_FC_Famalicão_Esports_2026-04-13.jsonl
+data/recordings/mkt_1997381_PURE_vs_ENRAGE_2026-04-16.jsonl
+data/recordings/mkt_1971829_Fake_do_Biru_vs_paiN_Academy_2026-04-15.jsonl
+data/recordings/mkt_1967032_Banger_Gang_vs_Peekaboo_2026-04-13.jsonl
+data/recordings/mkt_1981806_Lavked_vs_Phantom_2026-04-14.jsonl
+data/recordings/mkt_1990752_Crashers_vs_paiN_Academy_2026-04-15.jsonl
+data/recordings/mkt_1929853_FURIA_vs_GamerLegion_2026-04-13.jsonl
+data/recordings/mkt_1967483_Marsborne_vs_Team_Aether_2026-04-13.jsonl
+data/recordings/mkt_1976038_TDK_vs_MANA_eSports_2026-04-14.jsonl
+data/recordings/117087_HOTU_vs_Legacy_2026-04-15.jsonl
+data/recordings/mkt_1997734_CYBERSHOKE_Prospects_vs_megoshort_2026-04-16.jsonl
+data/recordings/mkt_1984578_RED_Canids_vs_Spirit_2026-04-15.jsonl
+data/recordings/117081_G2_vs_3DMAX_2026-04-15.jsonl
+data/recordings/117079_Liquid_vs_3DMAX_2026-04-14.jsonl
+data/recordings/mkt_1971181_Vexa_vs_MAGICOS_2026-04-15.jsonl
+data/recordings/mkt_1967468_Voca_vs_regain_2026-04-13.jsonl
+data/recordings/mkt_1974869_Natus_Vincere_vs_FURIA_2026-04-14.jsonl
+data/recordings/116757_Legacy_vs_MOUZ_2026-04-13.jsonl
+data/recordings/mkt_1935046_Sinners_vs_Johnny_Speeds_2026-04-13.jsonl
+data/recordings/mkt_1962494_Brute_vs_Young_Ninjas_2026-04-14.jsonl
+data/recordings/117225_BRUTE_vs_Fire_Flux_2026-04-15.jsonl
+data/recordings/mkt_1974866_Young_Ninjas_vs_Tricked_2026-04-14.jsonl
+data/recordings/mkt_1981850_ARCRED_vs_Metizport_2026-04-15.jsonl
+data/recordings/116857_FAVBET_vs_ESC_2026-04-15.jsonl
+data/recordings/116855_1win_vs_Bebop_2026-04-14.jsonl
+data/recordings/116854_ex-RUBY_vs_Phantom_2026-04-14.jsonl
+data/recordings/mkt_1997323_paiN_Academy_vs_Vexa_2026-04-16.jsonl
+data/recordings/mkt_1971852_Procyon_Gaming_vs_METANOIA_WOLVES_2026-04-13.jsonl
+data/recordings/mkt_1974900_Alliance_vs_UNiTY_esports_2026-04-14.jsonl
+data/recordings/117077_RED_Canids_vs_Gentle_Mates_2026-04-14.jsonl
+data/recordings/mkt_1989712_OldBoys_vs_hindsight_2026-04-15.jsonl
+data/recordings/mkt_1997336_R2_Esports_Club_vs_ALKA_2026-04-16.jsonl
+data/recordings/mkt_1974894_Clutchain_vs_Sinners_2026-04-15.jsonl
+data/recordings/mkt_1994998_Vitality_vs_Natus_Vincere_2026-04-16.jsonl
+data/recordings/mkt_1973327_Spirit_vs_Team_Falcons_2026-04-14.jsonl
+data/recordings/114233_ex-RUBY_vs_Metizport_2026-04-13.jsonl
+data/recordings/mkt_1990762_METANOIA_WOLVES_vs_Vexa_2026-04-15.jsonl
+data/recordings/mkt_1986945_FURIA_vs_MOUZ_2026-04-15.jsonl
+data/recordings/117714_LPH_vs_Eternal_Fire_Academy_2026-04-15.jsonl
+data/recordings/mkt_1971865_Vasco_Esports_vs_Crashers_2026-04-15.jsonl
+data/recordings/mkt_1929830_Astralis_vs_G2_2026-04-16.jsonl
+data/recordings/mkt_1929819_Vitality_vs_FUT_Esports_2026-04-15.jsonl
+data/recordings/mkt_1989715_Clutchain_Female_vs_Banger_Gang_2026-04-15.jsonl
+data/recordings/mkt_1994644_Lavked_vs_Bebop_2026-04-16.jsonl
+data/recordings/114234_ARCRED_vs_Lavked_2026-04-14.jsonl
+data/recordings/mkt_1964138_Coalesce_vs_Wingman_2026-04-14.jsonl
+data/recordings/mkt_1997320_LFO_vs_hindsight_2026-04-16.jsonl
+data/recordings/116859_TDK_vs_MANA_2026-04-15.jsonl
+data/recordings/mkt_1997395_FC_Famalicão_Esports_vs_Project_91_2026-04-16.jsonl
+data/recordings/mkt_1990685_Ctrl_Alt_Defeat_vs_CSGOPOSITIVE_2026-04-15.jsonl
+data/recordings/mkt_1964138_Coalesce_vs_Wingman_2026-04-16.jsonl
+data/recordings/117089_Natus_Vincere_vs_HOTU_2026-04-15.jsonl
+data/recordings/mkt_1929830_Astralis_vs_G2_2026-04-14.jsonl
+data/recordings/117486_TNC_vs_Sashi_2026-04-15.jsonl
+data/recordings/116858_CYBERSHOKE_vs_Oxuji_2026-04-15.jsonl
+data/recordings/mkt_1982175_Brute_vs_Fire_Flux_Esports_2026-04-15.jsonl
+data/recordings/mkt_1976017_Favbet_vs_ESC_Gaming_2026-04-14.jsonl
+data/recordings/mkt_1995621_Spirit_Academy_vs_Wave_Esports_2026-04-16.jsonl
+data/recordings/117721_QUAZAR_vs_PURE_2026-04-15.jsonl
+data/recordings/mkt_1997346_MIBR_Academy_vs_UNO_MILLE_2026-04-16.jsonl
+data/recordings/mkt_1973375_1WIN_vs_Bebop_2026-04-14.jsonl
+data/recordings/116925_Voca_vs_Marsborne_2026-04-15.jsonl
+data/recordings/mkt_1972593_RED_Canids_vs_Gentle_Mates_2026-04-14.jsonl
+data/recordings/116919_Voca_vs_Akimbo_2026-04-13.jsonl
+data/recordings/mkt_1995610_aimclub_vs_Wingman_2026-04-16.jsonl
+data/recordings/117654_VP.Future_vs_Eternal_Fire_Academy_2026-04-14.jsonl
+data/recordings/mkt_1994714_TDK_vs_Oxuji_Esports_2026-04-16.jsonl
+data/recordings/117481_ECSTATIC_vs_Johnny_Speeds_2026-04-14.jsonl
+data/recordings/mkt_1929841_Natus_Vincere_vs_FaZe_2026-04-14.jsonl
+data/recordings/117736_Spirit_Academy_vs_Wave_2026-04-16.jsonl
+data/recordings/mkt_1994692_1WIN_vs_Nuclear_TigeRES_2026-04-16.jsonl
+data/recordings/mkt_1997700_insane_players_vs_Zomblers_2026-04-16.jsonl
+data/recordings/mkt_1973281_Nuclear_TigeRES_vs_Lavked_2026-04-13.jsonl
+data/recordings/mkt_1967135_JUMBO_TEAM_vs_XI_Esport_2026-04-13.jsonl
+data/recordings/mkt_1929819_Vitality_vs_FUT_Esports_2026-04-13.jsonl
+data/recordings/mkt_1972548_Vitality_vs_G2_2026-04-13.jsonl
+data/recordings/117713_Phantom_Academy_vs_Hermine_2026-04-15.jsonl
+data/recordings/117601_Coalesce_vs_Wingman_2026-04-13.jsonl
+data/recordings/117618_Misa_vs_ReThink_2026-04-13.jsonl
+data/recordings/mkt_1986931_Natus_Vincere_vs_HOTU_2026-04-15.jsonl
+data/recordings/mkt_1971865_Vasco_Esports_vs_Crashers_2026-04-13.jsonl
+data/recordings/mkt_1967078_Misa_Esports_vs_ReThink_2026-04-13.jsonl
+data/recordings/mkt_1989703_ENJOY_vs_Aurora_Young_Blood_2026-04-15.jsonl
+data/recordings/mkt_1997743_Clutchain_vs_UNiTY_esports_2026-04-16.jsonl
+data/recordings/117605_ZOTIX_vs_Diamant_2026-04-13.jsonl
+data/recordings/117717_OldBoys_FR_vs_hindsight_2026-04-15.jsonl
+data/recordings/mkt_1989721_OLDBOYS-_vs_ReThink_2026-04-16.jsonl
+data/recordings/mkt_1973364_Liquid_vs_3DMAX_2026-04-14.jsonl
+data/recordings/mkt_1994735_MOUZ_NXT_vs_ex-RUBY_2026-04-16.jsonl
+data/recordings/mkt_1984610_Vitality_vs_Team_Falcons_2026-04-14.jsonl
+data/recordings/mkt_1978428_OLDBOYS-_vs_Aurora_Young_Blood_2026-04-14.jsonl
+data/recordings/116756_Spirit_vs_Liquid_2026-04-13.jsonl
+data/recordings/mkt_1973252_MOUZ_NXT_vs_GenOne_2026-04-14.jsonl
+data/recordings/117221_Misa_vs_Inner_Circle_Academy_2026-04-13.jsonl
+data/recordings/mkt_1990780_BESTIA_Academy_vs_R2_Esports_Club_2026-04-15.jsonl
+data/recordings/mkt_1971245_BESTIA_Academy_vs_UNO_MILLE_2026-04-14.jsonl
+data/recordings/mkt_1976006_Acend_vs_Ursa_2026-04-15.jsonl
+data/recordings/116754_Gentle_Mates_vs_G2_2026-04-13.jsonl
+data/recordings/mkt_1984589_G2_vs_3DMAX_2026-04-15.jsonl
+data/recordings/mkt_1929841_Natus_Vincere_vs_FaZe_2026-04-16.jsonl
+data/recordings/mkt_1973306_ex-RUBY_vs_Phantom_2026-04-14.jsonl
+data/recordings/mkt_1995584_Drama_eSports_vs_eternal_premium_2026-04-16.jsonl
+data/recordings/mkt_1929830_Astralis_vs_G2_2026-04-15.jsonl
+data/recordings/117735_aimclub_vs_Wingman_2026-04-16.jsonl
+data/recordings/117080_Spirit_vs_Falcons_2026-04-14.jsonl
+data/recordings/mkt_1973364_Liquid_vs_3DMAX_2026-04-13.jsonl
+data/recordings/mkt_1971222_QUINTESSÊNCIA_vs_MIBR_Academy_2026-04-13.jsonl
+data/recordings/117608_RUSTEC_vs_Diamant_2026-04-13.jsonl
+data/recordings/117616_Clutchain_fe_vs_QUAZAR_2026-04-13.jsonl
+data/recordings/mkt_1973252_MOUZ_NXT_vs_GenOne_2026-04-13.jsonl
+data/recordings/116753_Vitality_vs_RED_Canids_2026-04-13.jsonl
+data/recordings/mkt_1929819_Vitality_vs_FUT_Esports_2026-04-16.jsonl
+data/recordings/117224_Misa_vs_Fire_Flux_2026-04-14.jsonl
+data/recordings/mkt_1977511_VP.Future_vs_Eternal_Fire_Academy_2026-04-14.jsonl
+data/recordings/117488_Alliance_vs_UNiTY_2026-04-15.jsonl
+data/recordings/mkt_1971245_BESTIA_Academy_vs_UNO_MILLE_2026-04-13.jsonl
+data/recordings/mkt_1982175_Brute_vs_Fire_Flux_Esports_2026-04-14.jsonl
+data/recordings/mkt_1976017_Favbet_vs_ESC_Gaming_2026-04-15.jsonl
+data/recordings/mkt_1973306_ex-RUBY_vs_Phantom_2026-04-13.jsonl
+data/recordings/mkt_1967035_DGK_Esports_vs_Fire_Flux_Esports_2026-04-13.jsonl
+data/recordings/117088_Aurora_vs_MOUZ_2026-04-15.jsonl
+data/recordings/mkt_1929841_Natus_Vincere_vs_FaZe_2026-04-13.jsonl
+data/recordings/117631_ALKA_vs_HereWeGoAgain_2026-04-15.jsonl
+data/recordings/mkt_1974894_Clutchain_vs_Sinners_2026-04-14.jsonl
+data/recordings/mkt_1974900_Alliance_vs_UNiTY_esports_2026-04-15.jsonl
+data/recordings/mkt_1973281_Nuclear_TigeRES_vs_Lavked_2026-04-14.jsonl
+data/recordings/117706_Glitchtech_vs_Imperial_Academy_2026-04-15.jsonl
+data/recordings/117625_ZOTIX_vs_Famalicão_2026-04-13.jsonl
+data/recordings/mkt_1997685_Akimbo_Esports_vs_CHICANERY_2026-04-16.jsonl
+data/recordings/117722_Clutchain_fe_vs_Banger_Gang_2026-04-15.jsonl
+data/recordings/mkt_1964138_Coalesce_vs_Wingman_2026-04-15.jsonl
+data/recordings/117484_MOUZ_NXT_vs_Qual4_2026-04-14.jsonl
+data/recordings/mkt_1842267_B8_vs_Natus_Vincere_2026-04-13.jsonl
+data/recordings/mkt_1929819_Vitality_vs_FUT_Esports_2026-04-14.jsonl
+data/recordings/mkt_1967038_RUSTEC_vs_Diamant_Esports_2026-04-13.jsonl
+data/recordings/mkt_1972548_Vitality_vs_G2_2026-04-14.jsonl
+data/recordings/117711_Partizan_vs_INFURITY_2026-04-15.jsonl
+data/recordings/117480_SINNERS_vs_Johnny_Speeds_2026-04-13.jsonl
+data/recordings/mkt_1971865_Vasco_Esports_vs_Crashers_2026-04-14.jsonl
+data/recordings/mkt_1974891_MOUZ_NXT_vs_Qual4_2026-04-14.jsonl
+data/recordings/mkt_1989640_KOLESIE_vs_ESC_Gaming_2026-04-15.jsonl
+data/recordings/mkt_1984610_Vitality_vs_Team_Falcons_2026-04-15.jsonl
+data/recordings/114237_ARCRED_vs_Metizport_2026-04-16.jsonl
+data/recordings/mkt_1994987_Spirit_vs_MOUZ_2026-04-16.jsonl
+data/recordings/mkt_1997388_eternal_premium_vs_ENJOY_2026-04-16.jsonl
+data/recordings/114235_Phantom_vs_Metizport_2026-04-14.jsonl
+data/recordings/117604_QUAZAR_vs_VP.Prodigy_2026-04-13.jsonl
+data/recordings/117615_eternal_premium_vs_OLDBOYS_PL_2026-04-13.jsonl
+data/recordings/mkt_1929830_Astralis_vs_G2_2026-04-13.jsonl
+data/recordings/117655_3DMAX_Academy_vs_Wingman_2026-04-14.jsonl
+data/recordings/mkt_1997740_EYEBALLERS_vs_MOUZ_NXT_2026-04-16.jsonl
+data/recordings/117373_Vasco_vs_ALKA_2026-04-13.jsonl
+data/recordings/117487_KOLESIE_vs_ESC_2026-04-15.jsonl
+data/recordings/mkt_1984589_G2_vs_3DMAX_2026-04-14.jsonl
+data/recordings/117485_Clutchain_vs_SINNERS_2026-04-15.jsonl
+data/recordings/mkt_1974860_ECSTATIC_vs_Johnny_Speeds_2026-04-14.jsonl
+data/recordings/mkt_1971201_Alzon_vs_R2_Esports_Club_2026-04-13.jsonl
+data/recordings/mkt_1971245_BESTIA_Academy_vs_UNO_MILLE_2026-04-15.jsonl
+data/recordings/mkt_1976006_Acend_vs_Ursa_2026-04-14.jsonl
+data/recordings/mkt_1973375_1WIN_vs_Bebop_2026-04-13.jsonl
+data/recordings/117478_Alliance_vs_Tricked_2026-04-13.jsonl
+data/recordings/mkt_1991288_Young_Ninjas_vs_Fire_Flux_Esports_2026-04-16.jsonl
+data/recordings/mkt_1972593_RED_Canids_vs_Gentle_Mates_2026-04-13.jsonl
+data/recordings/mkt_1967075_eternal_premium_vs_OLDBOYS-_2026-04-13.jsonl
+data/recordings/117630_Fake_do_Biru_vs_paiN_Academy_2026-04-15.jsonl
+data/recordings/116759_B8_vs_Natus_Vincere_2026-04-13.jsonl
+data/recordings/mkt_1929841_Natus_Vincere_vs_FaZe_2026-04-15.jsonl
+data/recordings/117479_MOUZ_NXT_vs_Clutchain_2026-04-13.jsonl
+data/recordings/mkt_1973327_Spirit_vs_Team_Falcons_2026-04-13.jsonl
+data/recordings/mkt_1997356_Procyon_Gaming_vs_Vasco_Esports_2026-04-16.jsonl
+data/recordings/116853_Nuclear_TigeRES_vs_Lavked_2026-04-14.jsonl
+data/recordings/mkt_1989721_OLDBOYS-_vs_ReThink_2026-04-15.jsonl
+data/recordings/mkt_1975718_Legacy_vs_HOTU_2026-04-14.jsonl
+data/recordings/mkt_1964138_Coalesce_vs_Wingman_2026-04-13.jsonl

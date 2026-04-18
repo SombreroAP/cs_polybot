@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edge Bot — Pure Latency Arb</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0a0a0f; color: #fff; padding: 14px; font-size: 12px; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #12121a; border: 1px solid #f59e0b; border-radius: 6px; margin-bottom: 12px; }
+        .header h1 { font-size: 15px; color: #f59e0b; }
+        .badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+        .badge-run { background: #1a3a1a; color: #4ade80; }
+        .grid { display: grid; gap: 10px; margin-bottom: 10px; }
+        .g5 { grid-template-columns: repeat(5, 1fr); }
+        .g2 { grid-template-columns: 1fr 1fr; }
+        .card { background: #12121a; border: 1px solid #1e1e2e; border-radius: 6px; padding: 12px; }
+        .card h2 { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        .card.full { grid-column: 1 / -1; }
+        .big { font-size: 20px; font-weight: 700; }
+        .green { color: #4ade80; } .red { color: #f87171; } .yellow { color: #fbbf24; } .dim { color: #444; font-size: 10px; }
+        .chip { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-right: 4px; }
+        .chip-cs2 { background: #2a2a1a; color: #fbbf24; }
+        .chip-dota2 { background: #2a1a1a; color: #f87171; }
+        .chip-lol { background: #1a2a2a; color: #22d3ee; }
+        .chip-valorant { background: #2a1a2a; color: #e879f9; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; color: #444; padding: 5px 3px; border-bottom: 1px solid #1e1e2e; font-size: 10px; }
+        td { padding: 5px 3px; border-bottom: 1px solid #141420; }
+        .scroll { max-height: 600px; overflow-y: auto; }
+        .no-data { color: #2a2a2a; font-style: italic; padding: 12px; text-align: center; }
+        .tp { background: #065f46; color: #4ade80; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+        .sl { background: #7f1d1d; color: #f87171; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+        .te { background: #78350f; color: #fbbf24; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+        .res { background: #1e3a5f; color: #60a5fa; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+        .evt { display: flex; gap: 5px; padding: 4px 0; border-bottom: 1px solid #111118; font-size: 11px; }
+        .evt-time { color: #333; min-width: 50px; font-size: 10px; }
+        .evt-desc { flex: 1; color: #aaa; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⚡ EDGE BOT — Pure Latency Arbitrage</h1>
+        <div>
+            <span class="badge" id="mode">---</span>
+            <span class="badge badge-run" id="status">---</span>
+            <span style="color:#f59e0b;font-size:10px;margin-left:8px;">NO AI — SPEED ONLY</span>
+        </div>
+    </div>
+
+    <div class="grid g5">
+        <div class="card">
+            <h2>Balance</h2>
+            <div class="big green" id="bal">$1,000</div>
+        </div>
+        <div class="card">
+            <h2>P&L</h2>
+            <div class="big" id="pnl">$0.00</div>
+            <div class="dim" id="pnl-pct">0.0%</div>
+        </div>
+        <div class="card">
+            <h2>Trades</h2>
+            <div class="big yellow" id="trades">0</div>
+            <div class="dim" id="wl">0W / 0L</div>
+        </div>
+        <div class="card">
+            <h2>Win Rate</h2>
+            <div class="big" id="winrate">-</div>
+        </div>
+        <div class="card">
+            <h2>Uptime</h2>
+            <div class="big" style="color:#f59e0b" id="uptime">0:00</div>
+            <div class="dim" id="mkts">0 markets</div>
+        </div>
+    </div>
+
+    <!-- FEEDS -->
+    <div class="card full" style="margin-bottom:10px;">
+        <h2>Active Feeds</h2>
+        <div id="feeds"><span class="dim">Connecting...</span></div>
+    </div>
+
+    <!-- OPEN POSITIONS -->
+    <div class="card full" style="margin-bottom:10px;">
+        <h2>Open Positions <span class="dim">(auto-exit: TP +7.5% / SL -12.5% / no timeout)</span></h2>
+        <div id="positions" class="scroll"><div class="no-data">Waiting for fills...</div></div>
+    </div>
+
+    <!-- AI ANALYSIS (moved here — right below positions) -->
+    <div class="card full" style="margin-bottom:10px;">
+        <h2>AI Analysis (Hybrid Model) <span class="dim" id="claude-stats">0 calls | $0.00</span></h2>
+        <div id="claude-decisions" class="scroll" style="max-height:250px;"><div class="no-data">Waiting for event clusters...</div></div>
+    </div>
+
+    <!-- LIVE MATCHES -->
+    <div class="card full" style="margin-bottom:10px;">
+        <h2>Live Matches <span class="dim" id="match-count"></span></h2>
+        <div id="matches" class="scroll"><div class="no-data">Scanning for matches...</div></div>
+    </div>
+
+    <!-- UPCOMING (collapsed by default) -->
+    <div class="card full" style="margin-bottom:10px;">
+        <h2 style="cursor:pointer;" onclick="var el=document.getElementById('upcoming-list');var a=document.getElementById('upcoming-arrow');if(el.style.display==='none'){el.style.display='block';a.textContent='\u25BC'}else{el.style.display='none';a.textContent='\u25B6'}">
+            <span id="upcoming-arrow" style="color:#60a5fa;">&#9654;</span> Upcoming Games <span class="dim" id="upcoming-count"></span>
+        </h2>
+        <div id="upcoming-list" style="display:none;" class="scroll"><div class="no-data">No upcoming games</div></div>
+    </div>
+
+    <!-- TRADE HISTORY -->
+    <div class="card full" style="margin-bottom:10px;">
+        <h2>Trade History</h2>
+        <div class="scroll">
+            <table>
+                <thead><tr><th>Time</th><th>Exit</th><th>Team</th><th>Game</th><th>Stake</th><th>Buy</th><th>Sell</th><th>P&L</th><th>Trigger</th></tr></thead>
+                <tbody id="history"></tbody>
+            </table>
+            <div id="no-history" class="no-data">No trades yet</div>
+        </div>
+    </div>
+
+    <!-- AI Analysis moved above Live Matches -->
+
+    <!-- PRICE IMPACT ANALYSIS -->
+    <div class="card full" style="margin-bottom:10px;">
+        <h2>Price Impact Analysis <span class="dim">(how events move the market over time)</span></h2>
+        <div id="impact-summary" class="scroll" style="max-height:200px;"><div class="no-data">Collecting data...</div></div>
+    </div>
+
+    <!-- EVENT FEED -->
+    <div class="card full">
+        <h2>Edge Events <span class="dim">(green = faster than market)</span></h2>
+        <div id="events" class="scroll" style="max-height:250px;"><div class="no-data">Waiting for events...</div></div>
+    </div>
+
+    <!-- RAW GAME FEED -->
+    <div class="card full" style="margin-bottom:10px;">
+        <h2>Live Game Feed <span class="dim" id="feed-count">0 events</span></h2>
+        <div id="raw-feed" class="scroll" style="max-height:300px;font-family:'SF Mono','Fira Code',monospace;font-size:10px;"><div class="no-data">Waiting for game events...</div></div>
+    </div>
+
+    <!-- TERMINAL LOG -->
+    <div class="card full" style="margin-top:10px;">
+        <h2>Terminal <span class="dim" id="log-status">connecting...</span></h2>
+        <div style="font-size:9px;margin-bottom:6px;display:flex;gap:10px;flex-wrap:wrap;">
+            <span style="color:#4ade80;">● EDGE</span>
+            <span style="color:#f59e0b;">● EXIT</span>
+            <span style="color:#60a5fa;">● TRADE</span>
+            <span style="color:#22d3ee;">● MONITOR</span>
+            <span style="color:#a78bfa;">● IMPACT</span>
+            <span style="color:#7c5bf5;">● WS</span>
+            <span style="color:#fbbf24;">● WARNING</span>
+            <span style="color:#f87171;">● ERROR</span>
+            <span style="color:#888;">● FEED</span>
+        </div>
+        <div id="terminal" style="background:#0a0a0f;border:1px solid #1e1e2e;border-radius:4px;padding:8px;font-family:'SF Mono','Fira Code',monospace;font-size:10px;color:#888;max-height:300px;overflow-y:auto;white-space:pre-wrap;"></div>
+    </div>
+
+    <script>
+        function update(d) {
+            if (!d || d.status === 'no_update') return;
+            var ts = d.trade_stats || {};
+            var trades = ts.recent_trades || [];
+
+            // Header
+            document.getElementById('mode').textContent = d.mode || 'DRY-RUN';
+            document.getElementById('status').textContent = d.status || '---';
+
+            // Stats
+            var bal = ts.balance || 1000;
+            var start = ts.starting_balance || 1000;
+            var pnl = bal - start;
+            document.getElementById('bal').textContent = '$' + bal.toFixed(2);
+            document.getElementById('bal').className = 'big ' + (pnl >= 0 ? 'green' : 'red');
+            document.getElementById('pnl').textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2);
+            document.getElementById('pnl').className = 'big ' + (pnl >= 0 ? 'green' : 'red');
+            document.getElementById('pnl-pct').textContent = (pnl / start * 100).toFixed(1) + '%';
+
+            // Prefer server-side lifetime counters; fall back to recent_trades (capped at 100).
+            var resolved = trades.filter(function(t){return t.resolved});
+            var winsLocal = resolved.filter(function(t){return t.pnl > 0}).length;
+            var totalTrades = (ts.total_trades != null) ? ts.total_trades : resolved.length;
+            var wins = (ts.wins != null) ? ts.wins : winsLocal;
+            var losses = (ts.losses != null) ? ts.losses : (resolved.length - winsLocal);
+            var resolvedCount = wins + losses;
+            document.getElementById('trades').textContent = totalTrades;
+            document.getElementById('wl').textContent = wins + 'W / ' + losses + 'L';
+            document.getElementById('winrate').textContent = resolvedCount > 0 ? (wins/resolvedCount*100).toFixed(0) + '%' : '-';
+            document.getElementById('winrate').className = 'big ' + (wins > losses ? 'green' : wins < losses ? 'red' : 'yellow');
+
+            var sec = Math.floor(d.uptime_seconds || 0);
+            document.getElementById('uptime').textContent = Math.floor(sec/3600) + ':' + String(Math.floor((sec%3600)/60)).padStart(2,'0') + ':' + String(sec%60).padStart(2,'0');
+            var cs = d.claude_stats || {};
+            var wsOk = cs.ws_connected && cs.ws_fresh;
+            document.getElementById('mkts').textContent = (d.markets_tracked || 0) + ' markets';
+            document.getElementById('mkts').innerHTML = (d.markets_tracked || 0) + ' mkts | <span style="color:' + (wsOk ? '#4ade80' : '#f87171') + ';">' + (wsOk ? 'WS LIVE' : 'WS OFF') + '</span> ' + (cs.ws_messages || 0) + ' msgs';
+
+            // Feeds
+            var fc = d.feeds_connected || {};
+            var feedKeys = Object.keys(fc);
+            if (feedKeys.length) {
+                document.getElementById('feeds').innerHTML = feedKeys.map(function(k) {
+                    var on = fc[k];
+                    var game = k.split('_')[0];
+                    return '<span class="chip chip-' + game + '" style="border:1px solid ' + (on ? '#2a5a2a' : '#3a2a2a') + ';opacity:' + (on ? '1' : '0.4') + ';">' + k.toUpperCase() + ' ' + (on ? '<span style="color:#4ade80;">●</span>' : '<span style="color:#f87171;">○</span>') + '</span>';
+                }).join(' ');
+            }
+
+            // Open positions
+            var open = trades.filter(function(t){return !t.resolved});
+            var posEl = document.getElementById('positions');
+            if (open.length) {
+                posEl.innerHTML = '<table><tr><th>Team</th><th>Game</th><th>Bet</th><th>Buy</th><th>Now</th><th>P&L%</th><th>Trigger</th><th>Age</th></tr>' +
+                    open.map(function(t) {
+                        var pnlPct = t.pnl ? (t.pnl / t.amount * 100).toFixed(1) : '0.0';
+                        var pc = t.pnl > 0 ? 'green' : t.pnl < 0 ? 'red' : 'yellow';
+                        var age = t.age || 0;
+                        var ageStr = age > 3600 ? Math.floor(age/3600) + 'h' + Math.floor((age%3600)/60) + 'm' : age > 60 ? Math.floor(age/60) + 'm' + Math.floor(age%60) + 's' : Math.round(age) + 's';
+                        var trigger = t.trigger_event || '';
+                        var currentPrice = t.amount > 0 && t.shares > 0 ? (t.pnl / t.shares + t.fill_price) : t.fill_price;
+                        var cpColor = currentPrice > t.fill_price ? 'green' : currentPrice < t.fill_price ? 'red' : 'yellow';
+                        return '<tr><td>' + t.team + '</td><td><span class="chip chip-' + (t.game||'cs2') + '">' + (t.game||'?').toUpperCase() + '</span></td><td>$' + t.amount.toFixed(2) + '</td><td>$' + t.fill_price.toFixed(3) + '</td><td class="' + cpColor + '" style="font-weight:700;">$' + currentPrice.toFixed(3) + '</td><td class="' + pc + '">' + pnlPct + '%</td><td class="dim" style="font-size:9px;max-width:150px;overflow:hidden;text-overflow:ellipsis;">' + trigger + '</td><td class="dim">' + ageStr + '</td></tr>';
+                    }).join('') + '</table>';
+            } else {
+                posEl.innerHTML = '<div class="no-data">No open positions — waiting for edge signals</div>';
+            }
+
+            // Live matches — show ALL active matches (already filtered upstream to linked markets).
+            // Sort live ones by most recent event first; upcoming sorted to bottom.
+            var _now = Date.now() / 1000;
+            var am = (d.active_matches || []).slice().sort(function(a, b){
+                return (b._last_event_time || 0) - (a._last_event_time || 0);
+            });
+            var matchEl = document.getElementById('matches');
+            var upEl = document.getElementById('upcoming-list');
+            var liveMatches = am.filter(function(m){return !m.upcoming});
+            var upMatches = am.filter(function(m){return m.upcoming});
+            document.getElementById('match-count').textContent = liveMatches.length + ' live';
+            document.getElementById('upcoming-count').textContent = '(' + upMatches.length + ')';
+
+            // Format a price cent value with a color based on favored/underdog status
+            function priceTag(price) {
+                if (!price || price <= 0) return '';
+                var cents = (price * 100).toFixed(0);
+                var color = price >= 0.55 ? '#4ade80' : price >= 0.40 ? '#fbbf24' : '#f87171';
+                return ' <span style="color:' + color + ';font-weight:700;font-size:11px;">' + cents + '¢</span>';
+            }
+            function fmtMoney(v) {
+                if (!v || v <= 0) return '';
+                return v > 1000 ? '$' + (v/1000).toFixed(0) + 'K' : '$' + v.toFixed(0);
+            }
+
+            // Render a single market line (series OR map_winner) belonging to a match
+            function renderMarketLine(m, mkt, isChild) {
+                var g = m.game || 'cs2';
+                var isSeries = (mkt.market_type || 'series') === 'series';
+                var mtBadge = isSeries
+                    ? '<span style="background:#1e3a5f;color:#60a5fa;font-size:8px;padding:1px 5px;border-radius:2px;font-weight:700;">SERIES</span>'
+                    : '<span style="background:#065f46;color:#4ade80;font-size:8px;padding:1px 5px;border-radius:2px;font-weight:700;">MAP</span>';
+                // Show bet highlight on the row matching the market type the bet was placed on
+                var betMtype = m.bet_market_type || 'series';
+                var rowMtype = (mkt.market_type || 'series') === 'map_winner' ? 'map' : 'series';
+                var hasBet = m.has_bet && (rowMtype === betMtype || (!m.series && !m.map_winner));
+                var border = hasBet ? 'border:1px solid #fbbf24;' : 'border:1px solid ' + (isChild?'#252532':'#2a2a3a') + ';';
+                var bg = hasBet ? 'background:#1e1e2e;' : 'background:' + (isChild?'#15151d':'#1a1a24') + ';';
+                var ml = isChild ? 'margin-left:18px;border-left:2px solid #2a4a3a;' : '';
+                var score = m.upcoming ? 'vs' : (m.score || '0-0');
+                var links = '';
+                if (mkt.polymarket_url) links += ' <a href="' + mkt.polymarket_url + '" target="_blank" style="color:#4ade80;text-decoration:none;font-size:10px;">PM</a>';
+                // Stream link only on parent (series) row to avoid clutter
+                if (!isChild && m.stream_url) links += ' <a href="' + m.stream_url + '" target="_blank" style="color:#7c5bf5;text-decoration:none;font-size:10px;">WATCH</a>';
+
+                var nameSize = isChild ? '11' : '13';
+                var scoreSize = isChild ? '13' : '16';
+                var h = '<div style="' + bg + border + ml + 'border-radius:4px;padding:5px 10px;margin-bottom:' + (isChild?'4':'2') + 'px;">';
+                // Team row: name + price + score + name + price
+                h += '<div style="display:flex;justify-content:center;align-items:center;gap:8px;">';
+                h += '<span style="display:flex;align-items:center;justify-content:flex-end;width:180px;font-size:' + nameSize + 'px;gap:6px;">' +
+                     '<span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (m.team_a||'?') + '</span>' +
+                     priceTag(mkt.price_a) + '</span>';
+                h += '<span style="color:#f59e0b;font-size:' + scoreSize + 'px;font-weight:700;min-width:40px;text-align:center;">' + score + '</span>';
+                h += '<span style="display:flex;align-items:center;justify-content:flex-start;width:180px;font-size:' + nameSize + 'px;gap:6px;">' +
+                     priceTag(mkt.price_b) +
+                     '<span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (m.team_b||'?') + '</span>' +
+                     '</span>';
+                if (!isChild && !m.upcoming) h += '<span style="background:#065f46;color:#4ade80;font-size:8px;padding:1px 4px;border-radius:3px;font-weight:700;margin-left:4px;">LIVE</span>';
+                h += '</div>';
+
+                // Market details line
+                var pLine = mtBadge + ' <span class="chip chip-' + g + '">' + g.toUpperCase() + '</span>';
+                if (mkt.bid_a > 0) {
+                    var sprdColor = mkt.spread < 0.10 ? '#4ade80' : mkt.spread < 0.25 ? '#fbbf24' : '#f87171';
+                    pLine += ' bid:' + (mkt.bid_a*100).toFixed(0) + '¢ ask:' + (mkt.ask_a*100).toFixed(0) + '¢';
+                    pLine += ' spr:<span style="color:' + sprdColor + ';">' + (mkt.spread*100).toFixed(0) + '%</span>';
+                }
+                if (mkt.volume > 0) pLine += ' vol:<span style="color:#a78bfa;">' + fmtMoney(mkt.volume) + '</span>';
+                if (mkt.liquidity > 0) pLine += ' liq:<span style="color:#60a5fa;">' + fmtMoney(mkt.liquidity) + '</span>';
+                pLine += ' ' + links;
+                h += '<div style="font-size:9px;color:#888;margin-top:2px;">' + pLine + '</div>';
+                if (hasBet) {
+                    var betTag = '<span style="background:' + (rowMtype==='map'?'#065f46':'#1e3a5f') + ';color:#fff;font-size:8px;padding:1px 4px;border-radius:2px;font-weight:700;margin-left:4px;">' + rowMtype.toUpperCase() + '</span>';
+                    h += '<div style="font-size:10px;color:#fbbf24;margin-top:2px;font-weight:600;">BET: $' + (m.bet_total||0).toFixed(2) + ' on ' + (m.bet_team||'?') + ' ' + betTag + '</div>';
+                }
+                h += '</div>';
+                return h;
+            }
+
+            // Render a match: series row + optional map_winner child row
+            function renderMatch(m) {
+                var out = '';
+                // Upcoming matches don't have price data — render a simplified single row
+                if (m.upcoming) {
+                    out += renderMarketLine(m, {
+                        market_type: 'series',
+                        price_a: m.market_price_a || 0, price_b: m.market_price_b || 0,
+                        bid_a: m.best_bid_a || 0, ask_a: m.best_ask_a || 0,
+                        spread: m.spread || 0, volume: m.volume || 0, liquidity: m.liquidity || 0,
+                        polymarket_url: m.polymarket_url
+                    }, false);
+                    return out;
+                }
+                // Parent: series moneyline (always preferred top row)
+                if (m.series) {
+                    out += renderMarketLine(m, m.series, false);
+                } else if (m.map_winner) {
+                    // No series available — render the map as the primary row
+                    out += renderMarketLine(m, m.map_winner, false);
+                    return out;
+                } else {
+                    // No market data at all — render a bare row for visibility
+                    out += renderMarketLine(m, {
+                        market_type: 'series',
+                        price_a: m.market_price_a || 0, price_b: m.market_price_b || 0,
+                        bid_a: 0, ask_a: 0, spread: 0, volume: 0, liquidity: 0,
+                        polymarket_url: m.polymarket_url
+                    }, false);
+                }
+                // Child: map_winner (only when we also had a series on top)
+                if (m.series && m.map_winner) {
+                    out += renderMarketLine(m, m.map_winner, true);
+                }
+                return out;
+            }
+
+            if (liveMatches.length) {
+                var mhtml = '';
+                for (var mi = 0; mi < liveMatches.length; mi++) {
+                    mhtml += renderMatch(liveMatches[mi]);
+                }
+                matchEl.innerHTML = mhtml;
+            } else {
+                matchEl.innerHTML = '<div class="no-data">No live matches</div>';
+            }
+            // Upcoming (separate collapsed section)
+            if (upMatches.length) {
+                var uhtml = '';
+                for (var ui = 0; ui < upMatches.length; ui++) {
+                    var u = upMatches[ui];
+                    var g = u.game||'cs2';
+                    var vol = u.volume>0?(u.volume>1000?'$'+(u.volume/1000).toFixed(0)+'K':'$'+u.volume.toFixed(0)):'';
+                    uhtml += '<div style="background:#12121f;border:1px solid #1a1a2e;border-radius:3px;padding:4px 8px;margin-bottom:2px;font-size:11px;">';
+                    uhtml += '<span class="chip chip-' + g + '">' + g.toUpperCase() + '</span> ';
+                    uhtml += '<span style="font-weight:600;">' + (u.team_a||'?') + '</span> vs <span style="font-weight:600;">' + (u.team_b||'?') + '</span>';
+                    if (vol) uhtml += ' <span class="dim">| ' + vol + '</span>';
+                    uhtml += '</div>';
+                }
+                upEl.innerHTML = uhtml;
+            } else {
+                upEl.innerHTML = '<div class="no-data">No upcoming games</div>';
+            }
+
+            // Claude Edge Analysis
+            var claudeEl = document.getElementById('claude-decisions');
+            var claudeStats = document.getElementById('claude-stats');
+            var ecCalls = cs.edge_claude_calls || 0;
+            var ecCost = cs.edge_claude_cost || 0;
+            var ecDecisions = cs.edge_claude_decisions || [];
+            claudeStats.textContent = ecCalls + ' calls | $' + ecCost.toFixed(4) + ' | ' + cs.edge_claude_cache_hits + ' cached';
+            // Filter noise: SKIPs on untradable/out-of-range markets are useless clutter
+            ecDecisions = ecDecisions.filter(function(d){
+                var r = (d.reason || '').toLowerCase();
+                if (d.action === 'skip' && (
+                    r.indexOf('untradable') !== -1 ||
+                    r.indexOf('ask=0') !== -1 ||
+                    r.indexOf('ask is 0') !== -1 ||
+                    r.indexOf('no liquidity') !== -1 ||
+                    r.indexOf('stale') !== -1 ||
+                    r.indexOf('out of range') !== -1
+                )) return false;
+                return true;
+            });
+            if (ecDecisions.length) {
+                claudeEl.innerHTML = ecDecisions.slice().reverse().map(function(d) {
+                    var t = new Date(d.time * 1000);
+                    var ts = t.getHours().toString().padStart(2,'0') + ':' + t.getMinutes().toString().padStart(2,'0') + ':' + t.getSeconds().toString().padStart(2,'0');
+                    var actionColor = d.action === 'buy' ? '#4ade80' : '#f87171';
+                    var actionLabel = d.action === 'buy' ? 'BUY' : 'SKIP';
+                    var confBar = Math.round(d.confidence * 100);
+                    var confColor = d.confidence >= 0.8 ? '#4ade80' : d.confidence >= 0.6 ? '#fbbf24' : '#f87171';
+                    var isLocal = (d.cost || 0) === 0;
+                    // Model label: use the actual model name from the backend (qwen3:30b-a3b, gemma4, claude-haiku, etc.)
+                    var modelName = (d.model || '').toString();
+                    var modelLabel;
+                    if (modelName.indexOf('qwen') !== -1) modelLabel = 'QWEN 3 \u26A1';
+                    else if (modelName.indexOf('esports-noThink') !== -1) modelLabel = 'ESPORTS-FT \u26A1';
+                    else if (modelName.indexOf('gemma') !== -1) modelLabel = 'GEMMA 4 \u26A1';
+                    else if (modelName.indexOf('claude') !== -1) modelLabel = 'CLAUDE API';
+                    else modelLabel = isLocal ? (modelName.toUpperCase() + ' \u26A1') : 'CLAUDE API';
+                    var badgeColor = isLocal ? '#7c3aed' : '#2563eb';
+                    var modelBadge = '<span style="background:' + badgeColor + ';color:#fff;padding:1px 5px;border-radius:3px;font-size:8px;margin-left:4px;">' + modelLabel + '</span>';
+                    var latencyStr = isLocal ? '' : '';
+                    return '<div style="background:#1a1a24;border:1px solid ' + (d.action === 'buy' ? '#2a5a2a' : '#3a2a2a') + ';border-radius:5px;padding:6px 10px;margin-bottom:4px;">' +
+                        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                        '<span><span class="dim">' + ts + '</span> <span class="chip chip-' + d.game + '">' + d.game.toUpperCase() + '</span> ' + d.team + modelBadge + '</span>' +
+                        '<span style="color:' + actionColor + ';font-weight:700;">' + actionLabel + ' <span style="color:' + confColor + ';">' + confBar + '%</span></span>' +
+                        '</div>' +
+                        '<div style="margin-top:3px;">' +
+                        '<div style="background:#0a0a0f;border-radius:2px;height:4px;width:100%;"><div style="background:' + confColor + ';height:100%;width:' + confBar + '%;border-radius:2px;"></div></div>' +
+                        '</div>' +
+                        '<div style="font-size:11px;color:#ccc;margin-top:4px;line-height:1.4;word-wrap:break-word;">' + d.reason + '</div>' +
+                        '<div class="dim" style="font-size:9px;margin-top:2px;">' + d.events + ' events analyzed | ' + (isLocal ? 'LOCAL GPU \u26A1 $0' : '$' + (d.cost||0).toFixed(4)) + '</div>' +
+                        '</div>';
+                }).join('');
+            }
+
+            // Price Impact Analysis
+            var impSum = d.impact_summary || {};
+            var impEl = document.getElementById('impact-summary');
+            var impKeys = Object.keys(impSum);
+            if (impKeys.length) {
+                var ih = '<table><tr><th>Event</th><th>N</th><th>5s</th><th>15s</th><th>30s</th><th>45s</th><th>60s</th><th>90s</th><th>Max</th></tr>';
+                impKeys.sort(function(a,b) { return (impSum[b].avg_move_90s||impSum[b].avg_move_30s||0) - (impSum[a].avg_move_90s||impSum[a].avg_move_30s||0); });
+                for (var ik = 0; ik < impKeys.length; ik++) {
+                    var s = impSum[impKeys[ik]];
+                    var chip = '<span class="chip chip-' + s.game + '">' + s.game.toUpperCase() + '</span>';
+                    ih += '<tr><td>' + chip + ' ' + s.event_type + '</td><td>' + s.count + '</td>';
+                    ih += '<td>' + (s.avg_move_5s||0).toFixed(1) + '%</td>';
+                    ih += '<td>' + (s.avg_move_15s||0).toFixed(1) + '%</td>';
+                    ih += '<td>' + (s.avg_move_30s||0).toFixed(1) + '%</td>';
+                    ih += '<td>' + (s.avg_move_45s||0).toFixed(1) + '%</td>';
+                    ih += '<td>' + (s.avg_move_60s||0).toFixed(1) + '%</td>';
+                    var m90 = (s.avg_move_90s||0).toFixed(1);
+                    var m90color = parseFloat(m90) > 5 ? 'green' : parseFloat(m90) > 2 ? 'yellow' : 'dim';
+                    ih += '<td class="' + m90color + '" style="font-weight:700;">' + m90 + '%</td>';
+                    ih += '<td class="dim">' + (s.max_move||0).toFixed(1) + '%</td></tr>';
+                }
+                impEl.innerHTML = ih + '</table>';
+            }
+
+            // Trade history with expandable Claude analysis
+            // Track which rows are expanded (persists across poll refreshes)
+            if (!window._expandedTrades) window._expandedTrades = {};
+            var hist = document.getElementById('history');
+            var nh = document.getElementById('no-history');
+            if (resolved.length) {
+                nh.style.display = 'none';
+                hist.innerHTML = resolved.slice().reverse().map(function(t, idx) {
+                    var er = t.exit_reason || 'resolution';
+                    var badge = er === 'take_profit' ? '<span class="tp">TP</span>' :
+                                er === 'stop_loss' ? '<span class="sl">SL</span>' :
+                                er === 'time_exit' ? '<span class="te">TIME</span>' : '<span class="res">RES</span>';
+                    var pnl = t.pnl || 0;
+                    var pl = '<span class="' + (pnl>=0?'green':'red') + '">' + (pnl>=0?'+':'') + '$' + pnl.toFixed(2) + '</span>';
+                    var trigger = t.trigger_event || '';
+                    var sellStr = t.sell_price > 0 ? '$' + t.sell_price.toFixed(3) : '-';
+                    var pnlPct = t.amount > 0 ? (pnl / t.amount * 100).toFixed(1) : '0';
+                    var tradeTime = t.time ? new Date(t.time * 1000) : null;
+                    var timeStr = tradeTime ? tradeTime.getHours().toString().padStart(2,'0') + ':' + tradeTime.getMinutes().toString().padStart(2,'0') : '-';
+                    var rowId = 'td-' + idx;
+                    // Extract clean trigger text for display
+                    var triggerShort = '';
+                    if (trigger) {
+                        // Parse "CLAUDE: 95% | reason text | buy@0.520" or "ANALYZER: 90% | reason"
+                        var trigParts = trigger.split('|');
+                        if (trigParts.length >= 2) triggerShort = trigParts[1].trim().substring(0, 35);
+                        else triggerShort = trigger.substring(0, 35);
+                    }
+                    var hasDetail = true; // always show dropdown
+                    var isOpen = window._expandedTrades[rowId] || false;
+                    var arrow = isOpen ? '\u25BC' : '\u25B6';
+                    // Build detail content
+                    var detailContent = '';
+                    var a = t.analysis || {};
+                    var parts = [];
+                    // Full reasoning
+                    var reason = a.reason || trigger || 'No analysis recorded';
+                    // Prefer the model name stamped on the decision itself; otherwise infer.
+                    var modelName = (a.model || '').toString();
+                    var aModel;
+                    if (modelName) {
+                        if (modelName.indexOf('qwen') !== -1) aModel = 'Qwen 3 \u26A1';
+                        else if (modelName.indexOf('gemma') !== -1) aModel = 'Gemma 4 \u26A1';
+                        else if (modelName.indexOf('esports-noThink') !== -1) aModel = 'Esports-FT \u26A1';
+                        else if (modelName.indexOf('claude') !== -1) aModel = 'Claude API';
+                        else aModel = modelName + ' \u26A1';
+                    } else {
+                        // Legacy rows (pre-model-stamping): infer from trigger text
+                        var trig = trigger || '';
+                        aModel = (trig.indexOf('$0.000') > -1 || trig.indexOf('ANALYZER') > -1) ? 'Local GPU \u26A1' : 'Claude API';
+                    }
+                    parts.push('<div style="margin-bottom:6px;"><b style="color:#4ade80;">AI Analysis (' + aModel + '):</b> ' + reason + '</div>');
+                    var metaLine = [];
+                    if (a.confidence) metaLine.push('Confidence: ' + (a.confidence * 100).toFixed(0) + '%');
+                    if (a.events_analyzed) metaLine.push('Events analyzed: ' + a.events_analyzed);
+                    metaLine.push('Entry: $' + t.fill_price.toFixed(3));
+                    if (t.sell_price > 0) metaLine.push('Exit: $' + t.sell_price.toFixed(3));
+                    if (t.edge) metaLine.push('Edge: ' + (t.edge*100).toFixed(1) + '%');
+                    if (metaLine.length) parts.push('<div style="color:#fbbf24;font-size:10px;">' + metaLine.join(' | ') + '</div>');
+                    if (a.game_state) {
+                        var gs = a.game_state;
+                        var gsLine = '<div style="margin-top:4px;color:#aaa;font-size:10px;">Game: ' + (gs.team_a||'?') + ' vs ' + (gs.team_b||'?');
+                        if (gs.score_a !== undefined) gsLine += ' | Series: ' + gs.score_a + '-' + gs.score_b;
+                        if (gs.round_a !== undefined && gs.round_a > 0) gsLine += ' | Round: ' + gs.round_a + '-' + gs.round_b;
+                        if (gs.economy_a > 0) gsLine += ' | Economy: $' + (gs.economy_a/1000).toFixed(1) + 'k vs $' + (gs.economy_b/1000).toFixed(1) + 'k';
+                        if (gs.kills_a > 0) gsLine += ' | Kills: ' + gs.kills_a + '-' + gs.kills_b;
+                        if (gs.gold_lead) gsLine += ' | Gold: ' + (gs.gold_lead > 0 ? '+' : '') + gs.gold_lead.toLocaleString();
+                        gsLine += '</div>';
+                        parts.push(gsLine);
+                    }
+                    if (a.market_state) {
+                        var ms = a.market_state;
+                        parts.push('<div style="margin-top:2px;color:#aaa;font-size:10px;">Market: price=' + (ms.price*100).toFixed(1) + '\u00a2 bid=' + (ms.bid*100).toFixed(1) + '\u00a2 ask=' + (ms.ask*100).toFixed(1) + '\u00a2 spread=' + ((ms.spread||0)*100).toFixed(1) + '\u00a2 | ' + (ms.question||'') + '</div>');
+                    }
+                    if (a.event_window && a.event_window.length) {
+                        parts.push('<div style="margin-top:4px;color:#888;font-size:9px;">Events: ' + a.event_window.map(function(e){return '<span style="color:' + (e.team==='a'?'#4ade80':e.team==='b'?'#f87171':'#888') + ';">[' + e.type + '] ' + (e.desc||'').substring(0,40) + '</span>';}).join(' \u2192 ') + '</div>');
+                    }
+                    detailContent = parts.join('');
+                    var detailRow = hasDetail ? '<tr id="' + rowId + '" style="display:' + (isOpen ? 'table-row' : 'none') + ';"><td colspan="9"><div style="background:#0d0d18;border:1px solid #1a1a2e;border-radius:4px;padding:10px 14px;margin:2px 0;font-size:12px;line-height:1.6;word-wrap:break-word;white-space:normal;">' + detailContent + '</div></td></tr>' : '';
+                    return '<tr style="cursor:' + (hasDetail?'pointer':'default') + ';" onclick="if(!this.nextElementSibling)return;var s=this.nextElementSibling.style;var open=s.display!==\'none\';s.display=open?\'none\':\'table-row\';window._expandedTrades[\'' + rowId + '\']=!open;this.querySelector(\'.arrow\').textContent=open?\'\u25B6\':\'\u25BC\';if(!open)this.nextElementSibling.scrollIntoView({block:\'nearest\',behavior:\'smooth\'});"><td class="dim">' + timeStr + '</td><td>' + badge + '</td><td><span class="arrow" style="color:#60a5fa;margin-right:4px;">' + arrow + '</span>' + t.team + '</td><td><span class="chip chip-' + (t.game||'cs2') + '">' + (t.game||'?').toUpperCase() + '</span></td><td>$' + t.amount.toFixed(2) + '</td><td>$' + t.fill_price.toFixed(3) + '</td><td>' + sellStr + '</td><td>' + pl + ' <span class="dim">(' + (pnl>=0?'+':'') + pnlPct + '%)</span></td><td class="dim" style="font-size:9px;max-width:150px;overflow:hidden;text-overflow:ellipsis;">' + (triggerShort || '-') + '</td></tr>' + detailRow;
+                }).join('');
+            } else { nh.style.display = ''; }
+
+            // Events
+            var evts = d.recent_events || [];
+            var ef = document.getElementById('events');
+            if (evts.length) {
+                ef.innerHTML = evts.slice().reverse().slice(0, 50).map(function(e) {
+                    var t = new Date(e.time * 1000);
+                    var ts = t.getHours().toString().padStart(2,'0') + ':' + t.getMinutes().toString().padStart(2,'0') + ':' + t.getSeconds().toString().padStart(2,'0');
+                    var speedClass = e.faster === true ? 'green' : e.faster === false ? 'red' : 'dim';
+                    var edgeStr = e.edge ? (e.edge > 0 ? '+' : '') + (e.edge * 100).toFixed(1) + '%' : '';
+                    // Event type badge
+                    var etype = e.type || '';
+                    var typeBadge = '';
+                    var typeColor = '#555';
+                    if (etype === 'round_end') { typeBadge = 'RND'; typeColor = '#fbbf24'; }
+                    else if (etype === 'map_win') { typeBadge = 'MAP'; typeColor = '#4ade80'; }
+                    else if (etype === 'match_end') { typeBadge = 'END'; typeColor = '#f87171'; }
+                    else if (etype === 'score_update') { typeBadge = 'UPD'; typeColor = '#60a5fa'; }
+                    else if (etype === 'objective_taken') { typeBadge = 'OBJ'; typeColor = '#22d3ee'; }
+                    else if (etype === 'teamfight_won') { typeBadge = 'FIGHT'; typeColor = '#e879f9'; }
+                    else if (etype === 'economy_shift') { typeBadge = 'ECO'; typeColor = '#a78bfa'; }
+                    else if (etype === 'kill_streak') { typeBadge = 'KILLS'; typeColor = '#fb923c'; }
+                    else if (etype.indexOf('exit_') === 0) { typeBadge = 'EXIT'; typeColor = '#f59e0b'; }
+                    else { typeBadge = etype.substring(0,4).toUpperCase(); }
+                    var badge = '<span style="background:' + typeColor + '22;color:' + typeColor + ';font-size:8px;padding:1px 4px;border-radius:2px;font-weight:700;min-width:35px;display:inline-block;text-align:center;">' + typeBadge + '</span>';
+                    // Market info
+                    var mktStr = '';
+                    if (e.has_market && e.our_prob > 0) {
+                        mktStr = '<span class="dim" style="min-width:80px;text-align:right;">us:' + (e.our_prob*100).toFixed(0) + '% mkt:' + (e.market_prob*100).toFixed(0) + '%</span>';
+                    }
+                    return '<div class="evt"><span class="evt-time">' + ts + '</span>' + badge + '<span class="chip chip-' + (e.game||'cs2') + '">' + (e.game||'?').toUpperCase() + '</span><span class="evt-desc">' + (e.description||etype) + '</span>' + mktStr + '<span class="' + speedClass + '" style="min-width:50px;text-align:right;font-weight:600;">' + edgeStr + '</span></div>';
+                }).join('');
+            }
+
+            // Raw Game Feed — ALL events from ALL feeds
+            var rawFeed = d.raw_feed_events || [];
+            var rfEl = document.getElementById('raw-feed');
+            var rfCount = document.getElementById('feed-count');
+            if (rawFeed.length) {
+                rfCount.textContent = rawFeed.length + ' events';
+                rfEl.innerHTML = rawFeed.slice().reverse().slice(0, 80).map(function(e) {
+                    var t = new Date(e.time * 1000);
+                    var tss = t.getHours().toString().padStart(2,'0') + ':' + t.getMinutes().toString().padStart(2,'0') + ':' + t.getSeconds().toString().padStart(2,'0');
+                    var gameColors = {cs2:'#fbbf24',dota2:'#e879f9',lol:'#60a5fa',valorant:'#f87171'};
+                    var gc = gameColors[e.game] || '#888';
+                    var typeColors = {round_end:'#fbbf24',map_win:'#4ade80',match_end:'#4ade80',teamfight_won:'#e879f9',kill_streak:'#fb923c',score_update:'#888',objective_taken:'#22d3ee'};
+                    var tc = typeColors[e.type] || '#555';
+                    var teamColor = e.team === 'a' ? '#4ade80' : e.team === 'b' ? '#f87171' : '#888';
+                    var teams = e.team_a && e.team_b ? e.team_a + ' vs ' + e.team_b : '';
+                    var scoreStr = e.score ? ' [' + e.score + ']' : '';
+                    return '<div style="padding:2px 0;border-bottom:1px solid #111;">' +
+                        '<span class="dim">' + tss + '</span> ' +
+                        '<span style="color:' + gc + ';font-weight:600;width:40px;display:inline-block;">' + e.game.toUpperCase() + '</span> ' +
+                        '<span style="color:' + tc + ';width:60px;display:inline-block;">' + e.type.replace('_',' ') + '</span> ' +
+                        '<span style="color:' + teamColor + ';">' + e.description.substring(0, 70) + '</span>' +
+                        (teams ? ' <span class="dim">| ' + teams + scoreStr + '</span>' : '') +
+                        '</div>';
+                }).join('');
+            }
+        }
+
+        function poll() {
+            fetch('/api/state')
+                .then(function(r) { return r.json(); })
+                .then(function(d) { update(d); })
+                .catch(function(e) {});
+        }
+        poll();
+        setInterval(poll, 1000);
+
+        // Terminal log feed
+        function pollLogs() {
+            fetch('/api/logs')
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    var term = document.getElementById('terminal');
+                    var status = document.getElementById('log-status');
+                    if (d.lines && d.lines.length) {
+                        var html = d.lines.map(function(line) {
+                            var c = '#555';
+                            if (line.indexOf('[ERROR]') > -1) c = '#f87171';
+                            else if (line.indexOf('[WARNING]') > -1) c = '#fbbf24';
+                            else if (line.indexOf('[EDGE]') > -1) c = '#4ade80';
+                            else if (line.indexOf('[EXIT') > -1) c = '#f59e0b';
+                            else if (line.indexOf('[MONITOR]') > -1) c = '#22d3ee';
+                            else if (line.indexOf('[IMPACT]') > -1) c = '#a78bfa';
+                            else if (line.indexOf('[WS]') > -1) c = '#7c5bf5';
+                            else if (line.indexOf('[SIM]') > -1) c = '#60a5fa';
+                            else if (line.indexOf('KILLS') > -1 || line.indexOf('ROUND') > -1 || line.indexOf('MAP') > -1) c = '#888';
+                            return '<div style="color:' + c + ';">' + line.replace(/</g,'&lt;') + '</div>';
+                        }).join('');
+                        term.innerHTML = html;
+                        term.scrollTop = term.scrollHeight;
+                        status.textContent = d.lines.length + ' lines';
+                        status.style.color = '#4ade80';
+                    }
+                })
+                .catch(function(e) {});
+        }
+        pollLogs();
+        setInterval(pollLogs, 1500);
+    </script>
+</body>
+</html>
