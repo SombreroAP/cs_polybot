@@ -86,3 +86,4 @@ data/*.pkl
 # Generated: run `python data/processor.py process-all` to regenerate
 data/processed/
 data/training/
+data/evals/
