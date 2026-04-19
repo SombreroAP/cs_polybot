@@ -328,28 +328,37 @@ def process_all(pattern: str = "*.jsonl") -> dict:
 # Training set construction
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_sft(out_path: str = None) -> dict:
+def build_sft(out_path: str = None,
+              tp_pct: float = 0.04,
+              sl_pct: float = 0.04,
+              window_s: float = 120.0,
+              min_gap_s: float = 10.0,
+              quiet: bool = False) -> dict:
     """Build supervised fine-tuning examples.
 
     Method: replay each processed file. At every GAME_EVENT (trigger), snapshot
-    the state. Look ahead N seconds. If price moved ≥ TP_PCT in favour, label
-    {action: buy, hindsight_pnl: +Δ}. If it moved against ≥ SL_PCT, label
+    the state. Look ahead N seconds. If price moved ≥ tp_pct in favour, label
+    {action: buy, hindsight_pnl: +Δ}. If it moved against ≥ sl_pct, label
     {action: skip, hindsight_pnl: what_a_buy_would_have_lost}. Otherwise emit
     no example (ambiguous).
+
+    Defaults tuned for LIVE Polymarket CS2 books (thinner, slower than the
+    curated Test Data corpus we originally calibrated against). If you're
+    processing the original volatile Test Data corpus, pass tp_pct=0.08 to
+    keep the strong-signal-only filter.
     """
     out_path = out_path or os.path.join(TRAINING_DIR, "sft.jsonl")
     os.makedirs(TRAINING_DIR, exist_ok=True)
     processed = sorted(glob(os.path.join(PROCESSED_DIR, "*.jsonl")))
     if not processed:
-        print("No processed files — run `process-all` first.")
+        if not quiet:
+            print("No processed files — run `process-all` first.")
         return {"examples": 0}
 
-    TP_PCT = 0.08   # move > +8% within window → "buy was right"
-    SL_PCT = 0.08   # move > -8% within window → "buy was wrong, skip was right"
-    WINDOW_S = 90.0 # lookahead window
-    MIN_GAP_S = 10.0  # require at least this much time between consecutive
-                      # decision points on the same match (dedupe near-identical
-                      # situations that would otherwise bloat the corpus)
+    TP_PCT = tp_pct
+    SL_PCT = sl_pct
+    WINDOW_S = window_s
+    MIN_GAP_S = min_gap_s
 
     examples = 0
     skipped_ambiguous = 0
@@ -460,14 +469,18 @@ def build_sft(out_path: str = None) -> dict:
                 }
                 out.write(json.dumps(ex) + "\n")
 
-    print(f"SFT: {examples} examples written to {out_path}")
-    print(f"  skipped {skipped_ambiguous} as ambiguous (price didn't move clearly in window)")
-    print(f"  skipped {skipped_too_close} as too close to previous decision on same match")
-    print(f"  skipped {skipped_incomplete} as incomplete state (missing team or market data)")
+    if not quiet:
+        print(f"SFT: {examples} examples written to {out_path}")
+        print(f"  skipped {skipped_ambiguous} as ambiguous (price didn't move clearly in window)")
+        print(f"  skipped {skipped_too_close} as too close to previous decision on same match")
+        print(f"  skipped {skipped_incomplete} as incomplete state (missing team or market data)")
     return {"examples": examples,
             "skipped_ambiguous": skipped_ambiguous,
             "skipped_too_close": skipped_too_close,
             "skipped_incomplete": skipped_incomplete,
+            "tp_pct": tp_pct,
+            "sl_pct": sl_pct,
+            "window_s": window_s,
             "out": out_path}
 
 
