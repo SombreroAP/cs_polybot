@@ -364,6 +364,9 @@ def build_sft(out_path: str = None,
     skipped_ambiguous = 0
     skipped_too_close = 0
     skipped_incomplete = 0
+    # Split `incomplete` into its two causes for diagnostics
+    skipped_no_teams = 0
+    skipped_markets_missing = 0  # <2 tokens have both bid+ask at decision time
 
     with open(out_path, "w") as out:
         for pp in processed:
@@ -421,12 +424,14 @@ def build_sft(out_path: str = None,
                     skipped_ambiguous += 1
                     continue
 
-                last_emit_ts = e["ts"]
                 # REJECT INCOMPLETE STATES — training requires the essentials
+                # (moved BEFORE last_emit_ts update — previously a drop was
+                # still advancing the dedupe window, blocking the next valid event)
                 t1 = state_snap.get("team_one")
                 t2 = state_snap.get("team_two")
                 if t1 is None or t2 is None:
                     skipped_incomplete += 1
+                    skipped_no_teams += 1
                     continue
                 # Require BOTH markets with bid AND ask populated
                 markets_ok = [
@@ -435,7 +440,10 @@ def build_sft(out_path: str = None,
                 ]
                 if len(markets_ok) < 2:
                     skipped_incomplete += 1
+                    skipped_markets_missing += 1
                     continue
+                # Only now advance dedupe cursor — we're committing to emit
+                last_emit_ts = e["ts"]
 
                 last_emit_ts = e["ts"]
                 examples += 1
@@ -473,11 +481,14 @@ def build_sft(out_path: str = None,
         print(f"SFT: {examples} examples written to {out_path}")
         print(f"  skipped {skipped_ambiguous} as ambiguous (price didn't move clearly in window)")
         print(f"  skipped {skipped_too_close} as too close to previous decision on same match")
-        print(f"  skipped {skipped_incomplete} as incomplete state (missing team or market data)")
+        print(f"  skipped {skipped_incomplete} as incomplete state "
+              f"(teams-missing={skipped_no_teams}, markets-missing={skipped_markets_missing})")
     return {"examples": examples,
             "skipped_ambiguous": skipped_ambiguous,
             "skipped_too_close": skipped_too_close,
             "skipped_incomplete": skipped_incomplete,
+            "skipped_no_teams": skipped_no_teams,
+            "skipped_markets_missing": skipped_markets_missing,
             "tp_pct": tp_pct,
             "sl_pct": sl_pct,
             "window_s": window_s,

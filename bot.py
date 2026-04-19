@@ -730,7 +730,10 @@ class EsportsBot:
                     "map_name": ex.get("map_name", ""),
                     "side": ex.get("team_a_current_side", ""),
                 }, ta, tb)
-                # Record price snapshot if market exists
+                # Record price snapshot if market exists — BOTH tokens
+                # (previously only token_a was recorded — left 83% of our
+                # training files with only one side's orderbook, unusable for
+                # SFT generation which requires both bid+ask for both teams).
                 if market and self.polymarket_ws:
                     ws_a = self.polymarket_ws.get_price(market.token_id_a)
                     ws_b = self.polymarket_ws.get_price(market.token_id_b) if market.token_id_b else None
@@ -738,6 +741,12 @@ class EsportsBot:
                         self.recorder.record_best_bid_ask(
                             event.match_id, market.token_id_a,
                             ws_a.get("best_bid", 0), ws_a.get("best_ask", 0),
+                            ms.team_a, ms.team_b,
+                        )
+                    if ws_b:
+                        self.recorder.record_best_bid_ask(
+                            event.match_id, market.token_id_b,
+                            ws_b.get("best_bid", 0), ws_b.get("best_ask", 0),
                             ms.team_a, ms.team_b,
                         )
 
@@ -2116,16 +2125,25 @@ class EsportsBot:
                                 break
                         if not state or not state.is_live:
                             continue
-                        # Get WS prices
+                        # Get WS prices for BOTH tokens (training pipeline
+                        # needs both sides' orderbook to compute the buy-side
+                        # hindsight against the opposite side's pricing).
                         ws_a = self.polymarket_ws.get_price(market.token_id_a) if self.polymarket_ws else None
+                        ws_b = self.polymarket_ws.get_price(market.token_id_b) if (self.polymarket_ws and market.token_id_b) else None
                         if not ws_a or ws_a.get("best_bid", 0) <= 0:
                             continue
-                        # Record price snapshot
+                        # Record price snapshot — BOTH tokens
                         self.recorder.record_best_bid_ask(
                             match_id, market.token_id_a,
                             ws_a.get("best_bid", 0), ws_a.get("best_ask", 0),
                             state.team_a, state.team_b,
                         )
+                        if ws_b and ws_b.get("best_bid", 0) > 0:
+                            self.recorder.record_best_bid_ask(
+                                match_id, market.token_id_b,
+                                ws_b.get("best_bid", 0), ws_b.get("best_ask", 0),
+                                state.team_a, state.team_b,
+                            )
                         # (thin game-state snapshot DISABLED — the bo3.gg raw-payload
                         # handler _on_raw_bo3_snapshot writes rich SNAPSHOT_MATCH_UPDATE
                         # lines on every provider tick. Writing a thin one here too
