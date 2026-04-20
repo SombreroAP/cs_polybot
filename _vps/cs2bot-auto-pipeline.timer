@@ -1,0 +1,10 @@
+[Unit]
+Description=Fire auto-pipeline every 6 hours
+
+[Timer]
+OnCalendar=*-*-* 00/6:15:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

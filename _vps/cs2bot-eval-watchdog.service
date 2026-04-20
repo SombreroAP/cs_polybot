@@ -1,0 +1,12 @@
+[Unit]
+Description=CS2 bot — evaluator watchdog (runs every 4h, alerts on drift)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=bot
+Group=bot
+WorkingDirectory=/home/bot/esports
+ExecStart=/home/bot/esports/_vps/eval_watchdog.sh
+StandardOutput=append:/home/bot/esports/_logs/eval_watchdog.log
+StandardError=append:/home/bot/esports/_logs/eval_watchdog.log

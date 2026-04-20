@@ -1,0 +1,10 @@
+[Unit]
+Description=Fire eval-watchdog every 4 hours
+
+[Timer]
+OnCalendar=*-*-* 02/4:30:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

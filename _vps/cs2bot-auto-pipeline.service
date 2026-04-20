@@ -1,0 +1,12 @@
+[Unit]
+Description=CS2 bot — auto process+SFT pipeline (every 6h)
+After=network-online.target cs2bot.service
+
+[Service]
+Type=oneshot
+User=bot
+Group=bot
+WorkingDirectory=/home/bot/esports
+ExecStart=/home/bot/esports/_vps/auto_pipeline.sh
+StandardOutput=append:/home/bot/esports/_logs/auto_pipeline.log
+StandardError=append:/home/bot/esports/_logs/auto_pipeline.log
