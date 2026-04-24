@@ -97,6 +97,19 @@ def recorder_health() -> dict:
                 uptime_s = now - start_dt.timestamp()
         except Exception:
             pass
+    # Disk metrics — surface capacity so we catch "disk full" 20 days from now
+    disk_free_gb = 0.0
+    disk_used_pct = 0
+    try:
+        disk_raw = _sh("df -BG / | tail -1", 5)
+        # "/dev/... 97G 27G 67G 29% /"
+        parts = disk_raw.split()
+        if len(parts) >= 5:
+            disk_free_gb = float(parts[3].rstrip("G"))
+            disk_used_pct = int(parts[4].rstrip("%"))
+    except Exception:
+        pass
+
     return {
         "active": active,
         "uptime_hours": round(uptime_s / 3600, 1),
@@ -104,6 +117,8 @@ def recorder_health() -> dict:
         "total_files": file_count,
         "total_mb": round(total_mb, 1),
         "new_last_24h": last_24h_count,
+        "disk_free_gb": disk_free_gb,
+        "disk_used_pct": disk_used_pct,
     }
 
 
@@ -227,6 +242,18 @@ def format_daily(rec: dict, audit: dict, gates: dict,
                  f"up {rec['uptime_days']}d · "
                  f"{rec['total_files']} files · "
                  f"+{rec['new_last_24h']} in last 24h")
+
+    # Disk capacity — alert if low
+    disk_dot = "🟢"
+    if rec.get("disk_free_gb", 0) < 10:
+        disk_dot = "🔴"
+    elif rec.get("disk_free_gb", 0) < 20:
+        disk_dot = "🟡"
+    # Runway: avg 1 GB/day growth, project days remaining
+    runway_days = rec.get("disk_free_gb", 0) / 1.0  # conservative: 1 GB/day
+    lines.append(f"{disk_dot} Disk: {rec.get('disk_free_gb', 0):.0f} GB free "
+                 f"({rec.get('disk_used_pct', 0)}% used) · "
+                 f"~{runway_days:.0f}-day runway at 1 GB/day")
 
     # Training gate progress
     lines.append("")

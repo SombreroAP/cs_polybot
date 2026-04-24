@@ -26,9 +26,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 HERE = Path(__file__).resolve().parent
 
-GAMING_PC = "Andre@192.168.10.13"
+GAMING_PC = "Andre@192.168.76.196"
 VPS = "bot@85.137.174.57"
-OLLAMA_URL = "http://192.168.10.13:11434"
+OLLAMA_URL = "http://192.168.76.196:11434"
 
 # In-memory snapshot written by the poller thread, read by HTTP handler
 SNAPSHOT: dict = {
