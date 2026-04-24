@@ -864,13 +864,103 @@ class EsportsBot:
 
         self._update_state()
 
+    def _log_shadow_trade(self, signal) -> None:
+        """Record what the bot WOULD have done — for shadow-PnL tracking.
+
+        Writes to data/trades.db `shadow_trades` table (created if missing).
+        The Telegram admin can read this via /positions and /pnl when in
+        shadow mode. When we eventually compare shadow vs live PnL during
+        the Phase 5 cutover, this is the source of truth for 'what would
+        have happened'.
+        """
+        import sqlite3
+        import time
+        from pathlib import Path
+        try:
+            analysis = getattr(signal, '_analysis', None) or {}
+            db_path = Path(__file__).resolve().parent / "data" / "trades.db"
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(str(db_path))
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS shadow_trades (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts REAL NOT NULL,
+                    match_id TEXT,
+                    token_id TEXT,
+                    team TEXT,
+                    game TEXT,
+                    fill_price REAL,
+                    market_price REAL,
+                    bet_usd REAL,
+                    confidence REAL,
+                    tp_pct REAL,
+                    sl_pct REAL,
+                    trigger TEXT,
+                    llm_reason TEXT,
+                    llm_model TEXT
+                )
+            """)
+            conn.execute(
+                "INSERT INTO shadow_trades (ts, match_id, token_id, team, game, "
+                "fill_price, market_price, bet_usd, confidence, tp_pct, sl_pct, "
+                "trigger, llm_reason, llm_model) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    time.time(),
+                    getattr(signal.market, "match_id", "") if getattr(signal, "market", None) else "",
+                    signal.token_id,
+                    signal.team_name,
+                    signal.game,
+                    float(signal.our_price or 0),
+                    float(signal.market_price or 0),
+                    float(signal.bet_amount or 0),
+                    float(signal.confidence or 0),
+                    float(getattr(signal, "_tp_pct", 0) or 0),
+                    float(getattr(signal, "_sl_pct", 0) or 0),
+                    signal.reason[:200] if signal.reason else "",
+                    (analysis.get("reason") or "")[:200],
+                    analysis.get("model", ""),
+                )
+            )
+            conn.commit()
+            conn.close()
+            logger.info(
+                f"[SHADOW] {signal.team_name} would buy @ {signal.our_price:.3f} "
+                f"bet=${signal.bet_amount:.0f} conf={signal.confidence:.2f} — logged"
+            )
+        except Exception as e:
+            logger.warning(f"[SHADOW] log failed: {e}")
+
     def _on_trade_signal(self, signal: TradeSignal):
         """Handle trade signal from latency analyzer."""
-        # RECORD_ONLY mode: drop ALL trade signals before they reach qwen / the
-        # executor. Feeds, polymarket WS, and the match recorder keep running
-        # so we accumulate backtest data without burning CPU on losing sims.
         import os as _os
+        from pathlib import Path as _P
+        _repo = _P(__file__).resolve().parent
+
+        # ─── SAFETY GATES (ordered: hardest stop first) ──────────────────────
+
+        # 1. HARD_STOP.lock — permanent kill until the file is manually removed.
+        #    Written by /hardstop Telegram command or by risk.py when drawdown
+        #    hits HARD_STOP_PCT.
+        _hs = _repo / "HARD_STOP.lock"
+        if _hs.exists():
+            logger.warning(f"[HARD_STOP] {signal.team_name} dropped — lock file present at {_hs}")
+            return
+
+        # 2. RECORD_ONLY — no trading at all. Feeds + recorder keep running.
         if _os.environ.get("RECORD_ONLY", "").lower() in ("1", "true", "yes"):
+            return
+
+        # 3. /pause flag — user paused via Telegram. Existing positions stay
+        #    monitored (TP/SL logic runs elsewhere), new trades blocked.
+        if (_repo / ".bot_paused").exists():
+            logger.info(f"[PAUSED] {signal.team_name} dropped — .bot_paused flag present")
+            return
+
+        # 4. SHADOW_TRADING — log the decision but do NOT place an order.
+        #    Captures what the bot WOULD have done for shadow-PnL tracking.
+        _shadow = _os.environ.get("SHADOW_TRADING", "true").lower() in ("1", "true", "yes")
+        if _shadow:
+            self._log_shadow_trade(signal)
             return
         with self._state_lock:
             self.state.recent_signals.append({

@@ -140,25 +140,44 @@ def state_balance() -> dict:
 
 
 def state_positions() -> list[dict]:
-    """Load active positions from the executor's SQLite state."""
+    """Load active positions — real if LIVE, shadow if SHADOW_TRADING."""
     db_path = HERE / "data" / "trades.db"
     if not db_path.exists():
         return []
+    import sqlite3
     try:
-        import sqlite3
         conn = sqlite3.connect(str(db_path))
-        cur = conn.execute("""
-            SELECT match_id, team, fill_price, bet_size_usd, opened_ts,
-                   COALESCE(take_profit_target, 0), COALESCE(stop_loss_target, 0)
-            FROM positions WHERE status='open'
-        """)
+        # Prefer live positions table if it has open rows
         rows = []
-        for r in cur.fetchall():
-            rows.append({
-                "match_id": r[0], "team": r[1], "fill": r[2],
-                "bet": r[3], "opened_ts": r[4],
-                "tp": r[5], "sl": r[6],
-            })
+        try:
+            cur = conn.execute("""
+                SELECT match_id, team, fill_price, bet_size_usd, opened_ts,
+                       COALESCE(take_profit_target, 0), COALESCE(stop_loss_target, 0)
+                FROM positions WHERE status='open'
+            """)
+            for r in cur.fetchall():
+                rows.append({"match_id": r[0], "team": r[1], "fill": r[2],
+                             "bet": r[3], "opened_ts": r[4],
+                             "tp": r[5], "sl": r[6], "source": "live"})
+        except sqlite3.OperationalError:
+            pass  # no positions table yet
+
+        # If SHADOW_TRADING, also show recent shadow trades (last 24h)
+        if E.get("SHADOW_TRADING", "true").lower() in ("1", "true", "yes"):
+            try:
+                cur = conn.execute("""
+                    SELECT match_id, team, fill_price, bet_usd, ts, tp_pct, sl_pct
+                    FROM shadow_trades
+                    WHERE ts >= ?
+                    ORDER BY ts DESC LIMIT 15
+                """, (time.time() - 86400,))
+                for r in cur.fetchall():
+                    rows.append({"match_id": r[0], "team": r[1], "fill": r[2],
+                                 "bet": r[3], "opened_ts": r[4],
+                                 "tp": r[5], "sl": r[6], "source": "shadow"})
+            except sqlite3.OperationalError:
+                pass  # no shadow_trades table yet
+
         conn.close()
         return rows
     except Exception:
