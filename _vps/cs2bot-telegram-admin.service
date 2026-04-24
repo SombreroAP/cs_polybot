@@ -1,0 +1,18 @@
+[Unit]
+Description=CS2 bot — Telegram admin interface (long-polling)
+After=network-online.target cs2bot.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bot
+Group=bot
+WorkingDirectory=/home/bot/esports
+ExecStart=/home/bot/esports/venv/bin/python /home/bot/esports/telegram_admin.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/home/bot/esports/_logs/telegram_admin.log
+StandardError=append:/home/bot/esports/_logs/telegram_admin.log
+
+[Install]
+WantedBy=multi-user.target
