@@ -35,19 +35,27 @@ EXIT_COLUMNS = {
 }
 
 
-def _ensure_schema(conn: sqlite3.Connection) -> None:
-    """Add exit columns to shadow_trades if missing. Idempotent."""
+def _table_exists(conn: sqlite3.Connection) -> bool:
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='shadow_trades'"
+    )
+    return cur.fetchone() is not None
+
+
+def _ensure_schema(conn: sqlite3.Connection) -> bool:
+    """Add exit columns to shadow_trades if missing. Returns True iff the table
+    exists and has been brought up-to-date."""
+    if not _table_exists(conn):
+        # bot.py creates the table on first BUY decision. Nothing to do yet.
+        return False
     cur = conn.execute("PRAGMA table_info(shadow_trades)")
     have = {row[1] for row in cur.fetchall()}
-    if not have:
-        # Table doesn't exist yet (no shadow trades logged) — bot.py creates it
-        # on first BUY decision. Nothing to do until then.
-        return
     for col, kind in EXIT_COLUMNS.items():
         if col not in have:
             conn.execute(f"ALTER TABLE shadow_trades ADD COLUMN {col} {kind}")
             logger.info(f"[PAPER-FILL] schema: added column {col} {kind}")
     conn.commit()
+    return True
 
 
 def _current_price_for_token(linked_markets: dict, token_id: str) -> Optional[float]:
@@ -88,7 +96,7 @@ class PaperFillSimulator:
 
     def __init__(self, db_path: Path = DB_PATH) -> None:
         self.db_path = db_path
-        self._schema_checked = False
+        self._schema_ready = False  # flips once shadow_trades exists + has exit cols
         self.exits_recorded = 0
         self._last_log = 0.0
 
@@ -102,9 +110,11 @@ class PaperFillSimulator:
             logger.warning(f"[PAPER-FILL] db open failed: {e}")
             return 0
         try:
-            if not self._schema_checked:
-                _ensure_schema(conn)
-                self._schema_checked = True
+            if not self._schema_ready:
+                if not _ensure_schema(conn):
+                    # Table not yet created — first BUY decision will make it.
+                    return 0
+                self._schema_ready = True
 
             cur = conn.execute(
                 "SELECT id, ts, token_id, fill_price, tp_pct, sl_pct "
