@@ -2244,6 +2244,27 @@ class EsportsBot:
 
         threading.Thread(target=_run_snapshot_recorder, daemon=True).start()
 
+        # ─── PAPER-FILL SIMULATOR ──────────────────────────────────────────
+        # Monitors shadow_trades for TP/SL/timeout exits during shadow mode,
+        # so we know what realised P&L each shadow decision would have
+        # produced — without sending a real order.
+        try:
+            from paper_fill import PaperFillSimulator
+            self._paper_fill = PaperFillSimulator()
+            def _run_paper_fill():
+                import time as _time
+                _time.sleep(15)  # let positions monitor + feeds initialise
+                logger.info("[PAPER-FILL] Simulator thread started (every 3s)")
+                while self._running:
+                    try:
+                        self._paper_fill.tick(self.latency_analyzer._match_to_market)
+                    except Exception as e:
+                        logger.error(f"[PAPER-FILL] tick error: {e}")
+                    _time.sleep(config.POSITION_MONITOR_INTERVAL)
+            threading.Thread(target=_run_paper_fill, daemon=True).start()
+        except Exception as e:
+            logger.warning(f"[PAPER-FILL] not started: {e}")
+
         # Start all feeds (don't await — they run forever)
         feeds_task = asyncio.create_task(self._run_feeds())
 
