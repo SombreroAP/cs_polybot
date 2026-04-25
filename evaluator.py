@@ -274,9 +274,131 @@ class OllamaAdapter(ModelAdapter):
         }
 
 
+# OpenAI-compatible providers (same /v1/chat/completions shape; vary base_url +
+# api_key + pricing). Verified against April 2026 published rates.
+OPENAI_COMPAT_PROVIDERS = {
+    # OpenAI native
+    "openai": {
+        "base_url": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+        "pricing": {
+            "gpt-5-mini":  {"in": 0.25, "out": 2.00},   # $0.25/$2 per Mtok
+            "gpt-5-nano":  {"in": 0.10, "out": 0.80},
+            "gpt-5":       {"in": 1.25, "out": 10.00},
+        },
+    },
+    # Inception Labs — Mercury 2 (diffusion LLM, ~1000 tok/s, schema-aligned JSON).
+    "mercury": {
+        "base_url": "https://api.inceptionlabs.ai/v1",
+        "api_key_env": "INCEPTION_API_KEY",
+        "pricing": {
+            "mercury-2": {"in": 0.25, "out": 0.75},
+        },
+    },
+    # Google Gemini via the OpenAI-compatible endpoint
+    "gemini": {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "api_key_env": "GOOGLE_API_KEY",
+        "pricing": {
+            "gemini-2.5-flash-lite": {"in": 0.10, "out": 0.40},
+            "gemini-2.5-flash":      {"in": 0.30, "out": 2.50},
+            "gemini-3.1-flash-lite-preview": {"in": 0.25, "out": 1.50},
+        },
+    },
+    # DeepSeek direct API (V3.2 retiring Jul 2026 → use deepseek-v4-flash)
+    "deepseek": {
+        "base_url": "https://api.deepseek.com/v1",
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "pricing": {
+            "deepseek-chat":  {"in": 0.28, "out": 0.42},
+            "deepseek-v4-flash": {"in": 0.14, "out": 0.28},
+        },
+    },
+    # Mistral La Plateforme
+    "mistral": {
+        "base_url": "https://api.mistral.ai/v1",
+        "api_key_env": "MISTRAL_API_KEY",
+        "pricing": {
+            "mistral-small-latest": {"in": 0.06, "out": 0.18},
+            "ministral-3b-latest":  {"in": 0.04, "out": 0.04},
+        },
+    },
+}
+
+
+class OpenAIChatAdapter(ModelAdapter):
+    """Generic adapter for any OpenAI-compatible /v1/chat/completions endpoint.
+
+    Spec format: `<provider>://<model_id>` (e.g. `openai://gpt-5-mini`,
+    `mercury://mercury-2`, `gemini://gemini-2.5-flash-lite`).
+    """
+
+    def __init__(self, provider: str, model: str):
+        import requests
+        cfg = OPENAI_COMPAT_PROVIDERS.get(provider)
+        if not cfg:
+            raise SystemExit(f"Unknown provider: {provider}")
+        self.requests = requests
+        self.name = f"{provider}://{model}"
+        self.base_url = cfg["base_url"]
+        self.api_key = os.environ.get(cfg["api_key_env"]) or ""
+        if not self.api_key:
+            raise SystemExit(
+                f"{cfg['api_key_env']} not set in env (needed for {provider})"
+            )
+        self.model = model
+        # Default pricing if model not in table (will yield $0 cost — flag in summary)
+        self.pricing = cfg["pricing"].get(model, {"in": 0.0, "out": 0.0})
+
+    def call(self, system: str, user: str) -> dict:
+        t0 = time.time()
+        r = self.requests.post(
+            f"{self.base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                "temperature": 0,
+                "max_tokens": 200,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=60,
+        )
+        latency_ms = (time.time() - t0) * 1000
+        if r.status_code != 200:
+            return {
+                "response": "",
+                "latency_ms": latency_ms,
+                "input_tokens": 0, "output_tokens": 0,
+                "cost_usd": 0.0, "cached": False,
+                "error": f"HTTP {r.status_code}: {r.text[:200]}",
+            }
+        d = r.json()
+        text = d["choices"][0]["message"]["content"] or ""
+        usage = d.get("usage") or {}
+        in_tok = usage.get("prompt_tokens", 0)
+        out_tok = usage.get("completion_tokens", 0)
+        cost = (in_tok * self.pricing["in"] + out_tok * self.pricing["out"]) / 1_000_000
+        return {
+            "response": text, "latency_ms": latency_ms,
+            "input_tokens": in_tok, "output_tokens": out_tok,
+            "cost_usd": cost, "cached": False,
+        }
+
+
 def make_adapter(model_spec: str) -> ModelAdapter:
     if model_spec.startswith("ollama://"):
         return OllamaAdapter(model_spec[len("ollama://"):])
+    if "://" in model_spec:
+        provider, model = model_spec.split("://", 1)
+        if provider in OPENAI_COMPAT_PROVIDERS:
+            return OpenAIChatAdapter(provider, model)
     if model_spec.startswith("claude-") or model_spec in CLAUDE_ALIASES:
         return ClaudeAdapter(model_spec)
     # Default: Claude
