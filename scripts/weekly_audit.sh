@@ -28,10 +28,12 @@ tg() {
     --data-urlencode text="$1" > /dev/null
 }
 
-# 1. Pull latest VPS recordings (cheap, only the last 7 days)
+# 1. Pull latest VPS recordings. VPS stores them flat in data/recordings/ as
+# uncompressed .jsonl (file path discovered 2026-04-26 — earlier rsync path
+# had `raw/` and `.jsonl.gz` and silently no-op'd).
 echo "[+] syncing VPS recordings..."
-rsync -avz --include='*/' --include='*.jsonl.gz' --exclude='*' \
-  bot@85.137.174.57:~/esports/data/recordings/raw/ \
+rsync -avz --include='*.jsonl' --exclude='*' \
+  bot@85.137.174.57:~/esports/data/recordings/ \
   data/recordings/raw/ 2>&1 | tail -5 || true
 
 # 2. Re-process + audit
