@@ -357,10 +357,14 @@ class CS2Bo3WebSocketFeed(GameFeed):
 
     def estimate_win_probability(self, state: MatchState) -> float:
         """Simple CS2 win probability from round + series score."""
+        # Coerce None → 0 so partial states from a not-yet-populated feed
+        # don't blow up the `<=` / `+` comparisons below.
+        def _n(x, default=0):
+            return default if x is None else x
         # Series component
-        maps_needed = (state.total_maps // 2) + 1
-        sa = state.score_a
-        sb = state.score_b
+        maps_needed = (_n(state.total_maps, 3) // 2) + 1
+        sa = _n(state.score_a)
+        sb = _n(state.score_b)
         a_needs = maps_needed - sa
         b_needs = maps_needed - sb
 
@@ -372,8 +376,8 @@ class CS2Bo3WebSocketFeed(GameFeed):
         series_prob = max(0.01, min(0.99, b_needs / (a_needs + b_needs)))
 
         # Map component — rounds needed to win (13 in regulation)
-        ra = state.round_score_a
-        rb = state.round_score_b
+        ra = _n(state.round_score_a)
+        rb = _n(state.round_score_b)
         if ra + rb > 0:
             # Approximate map win probability from round score
             a_rounds_need = max(1, 13 - ra)

@@ -128,7 +128,15 @@ class GameFeed(ABC):
             try:
                 cb(event)
             except Exception as e:
-                logger.error(f"Event callback error: {e}")
+                # Include the originating callback + full traceback so we can
+                # diagnose silent breakage. The bare error message has been
+                # too opaque (e.g. "<= not supported between NoneType and int"
+                # with no hint of where it came from).
+                import traceback
+                cb_name = getattr(cb, "__qualname__", getattr(cb, "__name__", repr(cb)))
+                logger.error(
+                    f"Event callback error in {cb_name}: {e}\n{traceback.format_exc()}"
+                )
 
     @abstractmethod
     async def connect(self):

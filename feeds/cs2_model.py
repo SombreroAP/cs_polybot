@@ -36,7 +36,8 @@ def classify_buy(team_money: int) -> str:
 
     Returns: "eco", "force", or "full"
     """
-    if team_money <= 0:
+    # Coerce None / missing → unknown so callers don't have to pre-filter.
+    if team_money is None or team_money <= 0:
         return "unknown"
     if team_money < config.CS2_ECO_THRESHOLD:
         return "eco"
@@ -109,6 +110,9 @@ def get_side_for_round(start_side: str, round_number: int) -> str:
         start_side: team_a's side at the start of this map ("ct" or "t")
         round_number: 1-based round number
     """
+    # Treat missing round_number as round 1 (start of map).
+    if round_number is None:
+        round_number = 1
     if round_number <= 12:
         # First half
         return start_side

@@ -309,9 +309,15 @@ class EsportsBot:
                 info["price_b"] = round(ws_b["last_trade"], 3)
             elif ask_b > 0:
                 info["price_b"] = round((bid_b + ask_b) / 2, 3)
-        # Prices should sum to ~1.0; when only one side has WS data, derive the other
-        if info["price_a"] > 0 and (info["price_b"] <= 0 or abs(info["price_a"] + info["price_b"] - 1.0) > 0.15):
-            info["price_b"] = round(1.0 - info["price_a"], 3)
+        # Prices should sum to ~1.0; when only one side has WS data, derive the other.
+        # Coerce None → 0 to be defensive: missing book data on side B used to
+        # raise "<= not supported between NoneType and int".
+        pa = info.get("price_a") or 0
+        pb = info.get("price_b") or 0
+        info["price_a"] = pa
+        info["price_b"] = pb
+        if pa > 0 and (pb <= 0 or abs(pa + pb - 1.0) > 0.15):
+            info["price_b"] = round(1.0 - pa, 3)
         return info
 
     def _update_state(self):
@@ -1340,7 +1346,9 @@ class EsportsBot:
                 self._update_state()
 
             except Exception as e:
-                logger.error(f"Market scanner error: {e}")
+                # Full traceback so we can identify the line, not just the type.
+                import traceback
+                logger.error(f"Market scanner error: {e}\n{traceback.format_exc()}")
 
             await asyncio.sleep(30)  # scan every 30 seconds
 
