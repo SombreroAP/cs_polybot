@@ -19,23 +19,46 @@ logger = logging.getLogger(__name__)
 
 _RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "recordings")
 
+# Caps on open file handles. The bot has historically hit the 1024-fd ulimit
+# because finished matches were never closed (no per-match close API existed).
+# Three layers of defence below in MatchRecorder:
+#   1. close_match()  — caller closes when MATCH_END fires (preferred path)
+#   2. idle eviction  — close files with no writes in IDLE_CLOSE_SEC
+#   3. LRU hard cap   — never let len(_files) exceed MAX_OPEN_FILES
+MAX_OPEN_FILES = 64
+IDLE_CLOSE_SEC = 45 * 60        # 45 min without a write → assume match ended
+HOUSEKEEPING_INTERVAL = 1000    # scan for evictable files every N writes
+
 
 class MatchRecorder:
     """Records live match data for future backtesting."""
 
     def __init__(self):
         os.makedirs(_RECORDINGS_DIR, exist_ok=True)
-        self._files: dict[str, object] = {}  # match_id -> open file handle
+        # match_id -> open file handle
+        self._files: dict[str, object] = {}
+        # match_id -> last-write monotonic timestamp (for idle eviction + LRU)
+        self._last_write: dict[str, float] = {}
         self._meta_written: set[str] = set()
         self._lock = Lock()
         self._event_count = 0
         self._matches_recorded = set()
+        # Counters for visibility into the eviction paths
+        self._closes_explicit = 0
+        self._closes_idle = 0
+        self._closes_lru = 0
         logger.info(f"[RECORDER] Recording to {_RECORDINGS_DIR}")
 
     def _get_file(self, match_id: str, team_a: str = "", team_b: str = ""):
-        """Get or create the JSONL file for a match."""
+        """Get or create the JSONL file for a match. Caller holds self._lock."""
         if match_id in self._files:
             return self._files[match_id]
+
+        # Before opening a new handle, enforce the LRU hard cap. This is the
+        # last-resort defence against fd exhaustion if both close_match() and
+        # idle eviction miss something.
+        if len(self._files) >= MAX_OPEN_FILES:
+            self._evict_lru_locked()
 
         # Clean team names for filename
         clean = lambda s: "".join(c if c.isalnum() or c in "._- " else "" for c in s).strip().replace(" ", "_")
@@ -45,11 +68,58 @@ class MatchRecorder:
         filename = f"{match_id}_{ta}_vs_{tb}_{date}.jsonl"
         filepath = os.path.join(_RECORDINGS_DIR, filename)
 
+        # Append mode → safe to reopen if a late event arrives after close.
         f = open(filepath, "a", buffering=1)  # line-buffered
         self._files[match_id] = f
         self._matches_recorded.add(match_id)
         logger.info(f"[RECORDER] Recording match {match_id}: {team_a} vs {team_b} → {filename}")
         return f
+
+    def _close_one_locked(self, match_id: str, reason: str) -> bool:
+        """Close one file handle. Caller holds self._lock. Returns True if closed."""
+        f = self._files.pop(match_id, None)
+        self._last_write.pop(match_id, None)
+        if f is None:
+            return False
+        try:
+            f.close()
+        except Exception as e:
+            logger.warning(f"[RECORDER] close({match_id}) {reason} raised: {e}")
+        return True
+
+    def _evict_idle_locked(self, now: float) -> int:
+        """Close every file with no writes in IDLE_CLOSE_SEC. Caller holds lock."""
+        stale = [mid for mid, ts in self._last_write.items()
+                 if now - ts > IDLE_CLOSE_SEC]
+        for mid in stale:
+            if self._close_one_locked(mid, "idle"):
+                self._closes_idle += 1
+        if stale:
+            logger.info(f"[RECORDER] Evicted {len(stale)} idle file(s); "
+                        f"open={len(self._files)}")
+        return len(stale)
+
+    def _evict_lru_locked(self) -> bool:
+        """Close the single least-recently-written file. Caller holds lock."""
+        if not self._last_write:
+            return False
+        victim = min(self._last_write.items(), key=lambda kv: kv[1])[0]
+        if self._close_one_locked(victim, "LRU"):
+            self._closes_lru += 1
+            logger.warning(f"[RECORDER] LRU-evicted {victim} (cap={MAX_OPEN_FILES}); "
+                           f"open={len(self._files)}")
+            return True
+        return False
+
+    def close_match(self, match_id: str) -> bool:
+        """Close the recording file for one finished match. Idempotent."""
+        with self._lock:
+            closed = self._close_one_locked(match_id, "explicit")
+            if closed:
+                self._closes_explicit += 1
+                logger.info(f"[RECORDER] Closed match {match_id}; "
+                            f"open={len(self._files)}")
+            return closed
 
     def _write(self, match_id: str, message_type: str, raw: dict,
                team_a: str = "", team_b: str = ""):
@@ -66,12 +136,18 @@ class MatchRecorder:
             try:
                 f = self._get_file(match_id, team_a, team_b)
                 f.write(json.dumps(record) + "\n")
+                self._last_write[match_id] = now
                 self._event_count += 1
                 # Batch flush every 100 events
                 if self._event_count % 100 == 0:
                     for fh in self._files.values():
                         try: fh.flush()
                         except Exception: pass
+                # Housekeeping: every N writes, evict files idle > IDLE_CLOSE_SEC.
+                # This is the safety net for matches whose MATCH_END event is
+                # missed by the bot (network blip, feed drop, etc).
+                if self._event_count % HOUSEKEEPING_INTERVAL == 0:
+                    self._evict_idle_locked(now)
             except Exception as e:
                 logger.error(f"[RECORDER] Write error: {e}")
 
@@ -215,6 +291,9 @@ class MatchRecorder:
             "recordings_active": len(self._files),
             "matches_recorded": len(self._matches_recorded),
             "total_events_recorded": self._event_count,
+            "closes_explicit": self._closes_explicit,
+            "closes_idle": self._closes_idle,
+            "closes_lru": self._closes_lru,
         }
 
     def close(self):

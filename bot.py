@@ -858,6 +858,15 @@ class EsportsBot:
             market = self.latency_analyzer._match_to_market.get(event.match_id)
             if market:
                 self.executor.resolve_by_match(market.market_id, winning_team_name)
+            # Close the recording file for this match — releases the fd so we
+            # don't leak handles and eventually hit the 1024 ulimit. The
+            # recorder also has idle + LRU eviction as backstops, but the
+            # explicit close on MATCH_END is the clean path.
+            if self.recorder and event.match_id:
+                try:
+                    self.recorder.close_match(event.match_id)
+                except Exception as e:
+                    logger.warning(f"[recorder] close_match({event.match_id}) failed: {e}")
 
         # Feed to latency analyzer
         signal = self.latency_analyzer.process_event(event)
