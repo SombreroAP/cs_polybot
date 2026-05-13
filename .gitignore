@@ -87,3 +87,5 @@ data/*.pkl
 data/processed/
 data/training/
 data/evals/
+catboost_info/
+.gbm_env/
