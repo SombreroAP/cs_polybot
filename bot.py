@@ -2042,6 +2042,22 @@ class EsportsBot:
                             try:
                                 self.market_finder.update_market_prices(market)
                                 updated += 1
+                                # Feed MM on every successful market price update
+                                # (this is the ~1s primary book path — WS often silent)
+                                if _MM_AVAILABLE:
+                                    try:
+                                        if market.token_id_a and market.best_bid_a and market.best_ask_a:
+                                            _get_mm_runner().on_book(
+                                                market.token_id_a, match_id,
+                                                market.best_bid_a, market.best_ask_a,
+                                            )
+                                        if market.token_id_b and market.best_bid_b and market.best_ask_b:
+                                            _get_mm_runner().on_book(
+                                                market.token_id_b, match_id,
+                                                market.best_bid_b, market.best_ask_b,
+                                            )
+                                    except Exception:
+                                        pass
                             except Exception:
                                 pass
                         _update_count += 1
