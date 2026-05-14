@@ -38,10 +38,14 @@ class MMConfig:
     # (last in queue, almost never fills — that was the original bug: the
     # backtest's fill model rewarded "behind", the live fill model does not).
     quote_delta: float = 0.01          # improve best bid/ask by this many $
-    min_spread: float = 0.10           # don't quote if spread is below this
-    max_spread: float = 0.25           # don't quote ultra-wide books — they
-                                       # don't trade, the "edge" is illusory,
-                                       # and inventory would sit unhedged
+    # Polymarket esports market structure (observed 2026-05-14): liquid
+    # markets are mostly *resolved* (pinned 0.00/1.00); genuinely-live markets
+    # are thin with 10-40c spreads. There is no liquid+tight+live sweet spot,
+    # so we quote the live wide markets and lean on the toxic-flow model to
+    # avoid adverse fills. min 6c (need room to earn), max 30c (beyond that
+    # fills are almost purely toxic — someone crossing 30c is acting on news).
+    min_spread: float = 0.06
+    max_spread: float = 0.30
     max_inv: float = 5.0               # max absolute inventory in units
     quote_size: float = 1.0            # units per quote (config for live size)
     inventory_skew: float = 0.001      # tiny skew helps marginally
@@ -261,6 +265,6 @@ if __name__ == "__main__":
     assert abs(s.cash - 0.13) < 1e-9, s.cash  # 0.54 - 0.41
     # too-wide book should be skipped
     s2 = MMStrategy(token_id="wide")
-    assert s2.on_book_update(0.20, 0.60) is None, "should skip 40c spread"
+    assert s2.on_book_update(0.20, 0.65) is None, "should skip 45c spread"
     print(f"Stats: {s.stats()}")
     print("Smoke test passed.")

@@ -2216,8 +2216,11 @@ class EsportsBot:
                             if bid <= 0.01 or ask >= 0.99:
                                 continue
                             spread = ask - bid
-                            if spread < 0.08 or spread > 0.25:
+                            if spread < 0.05 or spread > 0.32:
                                 continue  # outside the strategy's tradeable band
+                                          # (strategy gate is [0.06, 0.30];
+                                          #  slightly looser here so transient
+                                          #  spread moves still keep tracking)
                             tradeable += 1
                             try:
                                 runner.submit_book_update(t, m.market_id, bid, ask)
