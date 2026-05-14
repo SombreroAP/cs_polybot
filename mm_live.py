@@ -87,6 +87,7 @@ class LiveMMRunner:
 
     def __init__(self, db_path: Optional[Path] = None,
                  cfg: Optional[MMConfig] = None):
+        import queue as _queue_mod
         self.db_path = Path(db_path) if db_path else DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.cfg = cfg or MMConfig()
@@ -98,10 +99,53 @@ class LiveMMRunner:
         self._last_book: Dict[str, dict] = {}
         self._init_db()
         self._load_state()
+        # Background worker for non-blocking submits.
+        # Bounded queue so a flood from a hot loop can never accumulate RAM.
+        # When full, oldest items are dropped (most recent book is fresher).
+        self._queue: _queue_mod.Queue = _queue_mod.Queue(maxsize=5000)
+        self._dropped = 0
+        self._stop_worker = threading.Event()
+        self._worker = threading.Thread(target=self._run_worker, daemon=True,
+                                         name="mm-worker")
+        self._worker.start()
         log.info(
             "[MM] LiveMMRunner ready (shadow mode). "
-            f"db={self.db_path}  cfg={self.cfg}"
+            f"db={self.db_path}  cfg={self.cfg}  worker=running"
         )
+
+    # ────── Worker (drains the queue, never blocks producers) ────────────
+    def _run_worker(self):
+        while not self._stop_worker.is_set():
+            try:
+                item = self._queue.get(timeout=1.0)
+            except Exception:
+                continue
+            try:
+                token_id, match_id, bid, ask, ts = item
+                # Reuse the existing on_book code path; it holds self._lock
+                # internally, but only this worker thread calls it, so there's
+                # no producer contention.
+                self.on_book(token_id, match_id, bid, ask, ts)
+            except Exception as e:
+                log.debug(f"[MM-WORKER] error processing: {e}")
+            finally:
+                self._queue.task_done()
+
+    def submit_book_update(self, token_id: str, match_id: Optional[str],
+                          bid: float, ask: float, ts: Optional[float] = None):
+        """Non-blocking enqueue. Drops oldest if queue is full so producers
+        (price_updater, WS callback) can never be backpressured."""
+        import queue as _queue_mod
+        try:
+            self._queue.put_nowait((token_id, match_id, bid, ask, ts or time.time()))
+        except _queue_mod.Full:
+            # Drop oldest by getting + discarding, then put new
+            try:
+                self._queue.get_nowait()
+                self._dropped += 1
+                self._queue.put_nowait((token_id, match_id, bid, ask, ts or time.time()))
+            except Exception:
+                pass
 
     def _execute_with_retry(self, sql: str, params: tuple = (), max_attempts: int = 5):
         """Execute a single statement with backoff on busy/locked DB."""
@@ -335,6 +379,10 @@ class LiveMMRunner:
             "drift_filter_pulls_24h": drift_pulls_24h,
             "fills_24h": fills_24h,
             "cash_24h": round(cash_24h, 4),
+            "queue_depth": self._queue.qsize(),
+            "queue_dropped_lifetime": self._dropped,
+            "diag_total_calls": LiveMMRunner._diag_total,
+            "diag_skipped": LiveMMRunner._diag_skipped,
         }
 
     def top_tokens(self, n: int = 10):

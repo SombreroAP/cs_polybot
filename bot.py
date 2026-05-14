@@ -770,7 +770,7 @@ class EsportsBot:
                         # Feed live MM runner (shadow mode)
                         if _MM_AVAILABLE:
                             try:
-                                _get_mm_runner().on_book(
+                                _get_mm_runner().submit_book_update(
                                     market.token_id_a, event.match_id,
                                     ws_a.get("best_bid", 0), ws_a.get("best_ask", 0),
                                 )
@@ -784,7 +784,7 @@ class EsportsBot:
                         )
                         if _MM_AVAILABLE:
                             try:
-                                _get_mm_runner().on_book(
+                                _get_mm_runner().submit_book_update(
                                     market.token_id_b, event.match_id,
                                     ws_b.get("best_bid", 0), ws_b.get("best_ask", 0),
                                 )
@@ -2001,7 +2001,7 @@ class EsportsBot:
                                 match_id = mid; break
                     except Exception:
                         match_id = None
-                    _get_mm_runner().on_book(token_id, match_id, best_bid, best_ask)
+                    _get_mm_runner().submit_book_update(token_id, match_id, best_bid, best_ask)
                 except Exception as _e:
                     pass  # never break the WS path on MM error
             self.polymarket_ws.on_price_update(_mm_on_price)
@@ -2042,11 +2042,26 @@ class EsportsBot:
                             try:
                                 self.market_finder.update_market_prices(market)
                                 updated += 1
-                                # MM hook here was wedging the loop (likely
-                                # holding the runner lock across slow predict()
-                                # calls × 75-987 markets per iter). Reverted —
-                                # MM is fed by the WS callback + snapshot loop
-                                # + REST-poll fallback paths instead.
+                                # MM hook is NON-BLOCKING via submit_book_update —
+                                # enqueues into a background worker thread. Safe
+                                # to call from any hot loop; predict() latency
+                                # cannot backpressure this thread.
+                                if _MM_AVAILABLE:
+                                    try:
+                                        if market.token_id_a:
+                                            _get_mm_runner().submit_book_update(
+                                                market.token_id_a, match_id,
+                                                market.best_bid_a or 0,
+                                                market.best_ask_a or 0,
+                                            )
+                                        if market.token_id_b:
+                                            _get_mm_runner().submit_book_update(
+                                                market.token_id_b, match_id,
+                                                market.best_bid_b or 0,
+                                                market.best_ask_b or 0,
+                                            )
+                                    except Exception:
+                                        pass
                             except Exception:
                                 pass
                         _update_count += 1
@@ -2088,7 +2103,7 @@ class EsportsBot:
                         for mid, mkt in self.latency_analyzer._match_to_market.items():
                             if mkt.token_id_a == tid or mkt.token_id_b == tid:
                                 match_id = mid; break
-                        _get_mm_runner().on_book(tid, match_id,
+                        _get_mm_runner().submit_book_update(tid, match_id,
                                                   book.best_bid, book.best_ask)
                     except Exception:
                         pass
@@ -2322,7 +2337,7 @@ class EsportsBot:
                         )
                         if _MM_AVAILABLE:
                             try:
-                                _get_mm_runner().on_book(
+                                _get_mm_runner().submit_book_update(
                                     market.token_id_a, match_id,
                                     ws_a.get("best_bid", 0), ws_a.get("best_ask", 0),
                                 )
@@ -2336,7 +2351,7 @@ class EsportsBot:
                             )
                             if _MM_AVAILABLE:
                                 try:
-                                    _get_mm_runner().on_book(
+                                    _get_mm_runner().submit_book_update(
                                         market.token_id_b, match_id,
                                         ws_b.get("best_bid", 0), ws_b.get("best_ask", 0),
                                     )
