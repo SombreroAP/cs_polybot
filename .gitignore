@@ -89,3 +89,4 @@ data/training/
 data/evals/
 catboost_info/
 .gbm_env/
+data/mm.db
