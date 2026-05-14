@@ -30,7 +30,7 @@ os.environ.setdefault("STOP_LOSS_PCT", "0.125")
 os.environ.setdefault("EXIT_TIMEOUT_SECONDS", "600")
 os.environ.setdefault("POSITION_MONITOR_INTERVAL", "1")
 os.environ.setdefault("EDGE_BOT_NO_SYNTHETIC", "true")  # live matches only
-os.environ.setdefault("ENABLED_GAMES", "cs2")
+os.environ.setdefault("ENABLED_GAMES", "cs2,dota2,lol,valorant")
 
 # Use main DB — this is the only bot now
 os.environ.setdefault("EDGE_BOT_DB", "data/trades.db")
@@ -45,8 +45,10 @@ config.EDGE_BOT_MIN_EDGE = 0.01
 config.MAX_OPEN_POSITIONS = 50
 config.EDGE_CLAUDE_MAX_CALLS = 500   # AI-driven mode: don't throttle qwen — let it evaluate every event
 
-# Focused on CS2 + Dota2 only (LoL/Valorant disabled — awaiting GRID data access)
-config.ENABLED_GAMES = ["cs2"]
+# Multi-game: CS2 game feed exists (HLTV), Dota2/LoL/Valorant feeds are stub —
+# but MM strategy is feed-agnostic, only needs Polymarket book history.
+# Unlinked-MM thread in bot.py quotes against all enabled games' liquid markets.
+config.ENABLED_GAMES = ["cs2", "dota2", "lol", "valorant"]
 
 # Override DB path for edge bot
 _EDGE_DB = os.environ.get("EDGE_BOT_DB", "data/edge_trades.db")
