@@ -53,8 +53,10 @@ class MMConfig:
     # XGBoost regressor predicting |mid drift in next 60s| from current features.
     # τ=2.0¢ threshold gives +3.31¢/fill vs heuristic -0.86¢/fill on backtest
     # (+4.17¢/fill improvement). Fallback to "relative" if model file missing.
-    model_path: str = "models/toxic_flow_xgb.pkl"
-    model_threshold_cents: float = 2.0
+    # v2 CatBoost: +4.36¢/fill @ τ=1.5¢ (best in head-to-head, 2026-05-14)
+    # Falls back to xgb (v1, +3.31¢/fill) if v2 not loadable.
+    model_path: str = "models/toxic_flow_v2_cb.pkl"
+    model_threshold_cents: float = 1.5
 
 
 @dataclass

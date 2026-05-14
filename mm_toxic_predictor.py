@@ -22,7 +22,8 @@ from typing import Optional
 log = logging.getLogger("mm_toxic")
 
 
-# Features must match what _gbm_lab/toxic_flow/build_dataset.py produced
+# Features must match the model's training-time feature list. The
+# predictor reads `features` from the pickle so both v1 and v2 work.
 EXPECTED_FEATURES = [
     "spread", "mid",
     "past_drift_5s", "past_drift_10s", "past_drift_30s",
@@ -31,6 +32,22 @@ EXPECTED_FEATURES = [
     "abs_past_drift_60s", "abs_past_drift_300s",
     "velocity_1s", "accel_5_10",
     "tod_sin", "tod_cos",
+]
+
+# v2 feature set (used when model is catboost_v2 etc)
+V2_FEATURES = [
+    "spread",
+    "past_drift_5s", "past_drift_10s", "past_drift_30s",
+    "past_drift_60s", "past_drift_300s",
+    "abs_past_drift_5s", "abs_past_drift_10s", "abs_past_drift_30s",
+    "abs_past_drift_60s", "abs_past_drift_300s",
+    "velocity_1s", "accel_5_10",
+    "vol_30s", "vol_60s", "vol_300s",
+    "spread_change_30s",
+    "tod_sin", "tod_cos",
+    "dow_sin", "dow_cos",
+    "comp_drift_30s", "abs_comp_drift_30s", "comp_mid",
+    "comp_sum", "comp_sum_dev",
 ]
 
 
@@ -88,44 +105,88 @@ def get_predictor(model_path: str) -> _ModelHandle:
 # Feature extraction from a rolling mid history
 # ────────────────────────────────────────────────────────────────────────
 def extract_features(mid_history, current_bid: float, current_ask: float,
-                     t_now: float) -> dict:
-    """Build a feature dict from the strategy's rolling mid history.
+                     t_now: float, *, spread_history=None,
+                     comp_mid_history=None) -> dict:
+    """Build a feature dict for the toxic-flow predictor.
 
-    mid_history: list of (ts, mid) tuples, ordered oldest→newest, last
-                 entry being t_now.
+    mid_history: list of (ts, mid) tuples, oldest→newest.
+    spread_history (optional): list of (ts, spread) — enables spread_change_30s.
+    comp_mid_history (optional): same shape for the complementary token —
+                                 enables comp_drift_30s / comp_sum / comp_sum_dev.
     """
     mid = (current_bid + current_ask) / 2
     spread = current_ask - current_bid
 
-    def mid_at(t_target):
-        # Find latest mid with ts <= t_target
+    def latest_le(history, t_target):
+        if not history:
+            return None
         best = None
-        for ts, m in mid_history:
+        for ts, m in history:
             if ts <= t_target:
                 best = m
             else:
                 break
         return best
 
+    def std_in_window(history, t_now, window):
+        vals = [m for ts, m in history if t_now - window <= ts <= t_now]
+        if len(vals) < 2:
+            return 0.0
+        import statistics
+        return float(statistics.pstdev(vals))
+
     feats = {"spread": spread, "mid": mid}
     for w in [5, 10, 30, 60, 300]:
-        past = mid_at(t_now - w)
+        past = latest_le(mid_history, t_now - w)
         v = (mid - past) if past is not None else 0.0
         feats[f"past_drift_{w}s"] = v
         feats[f"abs_past_drift_{w}s"] = abs(v)
 
-    prev = mid_at(t_now - 1.0)
+    prev = latest_le(mid_history, t_now - 1.0)
     feats["velocity_1s"] = (mid - prev) if prev is not None else 0.0
 
-    a5 = mid_at(t_now - 5.0); a10 = mid_at(t_now - 10.0)
-    if a5 is not None and a10 is not None:
-        feats["accel_5_10"] = (mid - a5) - (a5 - a10)
+    a5 = latest_le(mid_history, t_now - 5.0)
+    a10 = latest_le(mid_history, t_now - 10.0)
+    feats["accel_5_10"] = ((mid - a5) - (a5 - a10)) if (a5 is not None and a10 is not None) else 0.0
+
+    # v2 features
+    for w in [30, 60, 300]:
+        feats[f"vol_{w}s"] = std_in_window(mid_history, t_now, w)
+
+    if spread_history:
+        prev_spread = latest_le(spread_history, t_now - 30.0)
+        feats["spread_change_30s"] = spread - prev_spread if prev_spread is not None else 0.0
     else:
-        feats["accel_5_10"] = 0.0
+        feats["spread_change_30s"] = 0.0
 
     dt = datetime.fromtimestamp(t_now, tz=timezone.utc)
     hour = dt.hour + dt.minute / 60.0
     feats["tod_sin"] = math.sin(2 * math.pi * hour / 24)
     feats["tod_cos"] = math.cos(2 * math.pi * hour / 24)
+    dow = dt.weekday()
+    feats["dow_sin"] = math.sin(2 * math.pi * dow / 7)
+    feats["dow_cos"] = math.cos(2 * math.pi * dow / 7)
+
+    if comp_mid_history:
+        cm_now = latest_le(comp_mid_history, t_now)
+        cm_30 = latest_le(comp_mid_history, t_now - 30.0)
+        if cm_now is not None and cm_30 is not None:
+            feats["comp_drift_30s"] = cm_now - cm_30
+            feats["abs_comp_drift_30s"] = abs(cm_now - cm_30)
+            feats["comp_mid"] = cm_now
+            feats["comp_sum"] = mid + cm_now
+            feats["comp_sum_dev"] = abs((mid + cm_now) - 1.0)
+        else:
+            feats["comp_drift_30s"] = 0.0
+            feats["abs_comp_drift_30s"] = 0.0
+            feats["comp_mid"] = 0.5
+            feats["comp_sum"] = 1.0
+            feats["comp_sum_dev"] = 0.0
+    else:
+        feats["comp_drift_30s"] = 0.0
+        feats["abs_comp_drift_30s"] = 0.0
+        feats["comp_mid"] = 0.5
+        feats["comp_sum"] = 1.0
+        feats["comp_sum_dev"] = 0.0
 
     return feats
