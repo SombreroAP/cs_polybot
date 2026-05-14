@@ -119,8 +119,21 @@ class LiveMMRunner:
         return conn
 
     def _init_db(self):
-        with self._connect() as c:
-            c.executescript(_SCHEMA)
+        # Statement-by-statement so any single CREATE that hits a busy lock
+        # gets the per-connection 30s timeout, instead of failing the whole
+        # script atomically. Splitting on `;` keeps it simple.
+        for stmt in [s.strip() for s in _SCHEMA.split(";") if s.strip()]:
+            for attempt in range(3):
+                try:
+                    with self._connect() as c:
+                        c.execute(stmt)
+                    break
+                except sqlite3.OperationalError as e:
+                    if "locked" in str(e).lower() and attempt < 2:
+                        log.warning(f"[MM] init_db retry on lock: {stmt[:40]}…")
+                        time.sleep(1.0 * (attempt + 1))
+                        continue
+                    raise
 
     def _load_state(self):
         """Resume in-memory strategy state from mm_state."""

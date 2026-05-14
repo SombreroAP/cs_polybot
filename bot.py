@@ -131,6 +131,15 @@ class EsportsBot:
         self.match_analyzer = ContinuousMatchAnalyzer(self)  # continuous Gemma 4 analysis
         self.recorder = MatchRecorder()  # record ALL data for backtesting
 
+        # Initialise live MM runner now so tables exist before any other
+        # thread races us. Shadow mode — observes only, never places orders.
+        if _MM_AVAILABLE:
+            try:
+                _get_mm_runner()
+                logger.info("[MM] live runner initialised at bot startup (shadow mode)")
+            except Exception as _mme:
+                logger.warning(f"[MM] startup init failed (will retry lazily): {_mme}")
+
         # Team intelligence & reference odds
         self.odds_ref = None
 
