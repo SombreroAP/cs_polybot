@@ -294,9 +294,25 @@ class LiveMMRunner:
                     "ask_price": decision.get("new_ask_price"),
                     "ts": ts,
                 }
+                # Fire to live trader (no-op if MM_LIVE_TRADING != true)
+                try:
+                    from mm_live_trader import get_trader
+                    get_trader().quote(
+                        token_id,
+                        decision.get("new_bid_price"),
+                        decision.get("new_ask_price"),
+                        decision.get("size", 1.0),
+                    )
+                except Exception as e:
+                    log.debug(f"[MM] live-trader quote err: {e}")
             elif decision.get("action") == "cancel_all":
                 self._last_quote[token_id] = {"bid_price": None,
                                               "ask_price": None, "ts": ts}
+                try:
+                    from mm_live_trader import get_trader
+                    get_trader().cancel(token_id)
+                except Exception as e:
+                    log.debug(f"[MM] live-trader cancel err: {e}")
 
         # 5. Update last book + persist state
         self._last_book[token_id] = {"bid": bid, "ask": ask, "ts": ts}

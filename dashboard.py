@@ -119,6 +119,11 @@ def api_mm():
         stats = runner.aggregate_stats()
         # Surface the live-trading flag so the dashboard can show LIVE vs SHADOW
         stats["live_trading"] = os.environ.get("MM_LIVE_TRADING", "false").lower() == "true"
+        try:
+            from mm_live_trader import get_trader
+            stats["live_trader"] = get_trader().status()
+        except Exception as e:
+            stats["live_trader"] = {"error": str(e)[:100]}
         return jsonify({
             "stats": stats,
             "top_tokens": runner.top_tokens(8),
