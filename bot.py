@@ -2042,24 +2042,11 @@ class EsportsBot:
                             try:
                                 self.market_finder.update_market_prices(market)
                                 updated += 1
-                                # Feed MM on every market price update. on_book
-                                # filters out invalid (bid<=0, crossed, etc).
-                                if _MM_AVAILABLE:
-                                    try:
-                                        if market.token_id_a:
-                                            _get_mm_runner().on_book(
-                                                market.token_id_a, match_id,
-                                                market.best_bid_a or 0,
-                                                market.best_ask_a or 0,
-                                            )
-                                        if market.token_id_b:
-                                            _get_mm_runner().on_book(
-                                                market.token_id_b, match_id,
-                                                market.best_bid_b or 0,
-                                                market.best_ask_b or 0,
-                                            )
-                                    except Exception as _mme:
-                                        logger.warning(f"[MM] price-updater hook err: {_mme}")
+                                # MM hook here was wedging the loop (likely
+                                # holding the runner lock across slow predict()
+                                # calls × 75-987 markets per iter). Reverted —
+                                # MM is fed by the WS callback + snapshot loop
+                                # + REST-poll fallback paths instead.
                             except Exception:
                                 pass
                         _update_count += 1
