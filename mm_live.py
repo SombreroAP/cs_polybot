@@ -181,8 +181,8 @@ class LiveMMRunner:
                 bid: float, ask: float, ts: Optional[float] = None):
         """Called by the bot on every observed book change for a token."""
         LiveMMRunner._diag_total += 1
-        # Heartbeat every 100 calls so we can confirm hook is firing in logs
-        if LiveMMRunner._diag_total % 100 == 1:
+        # Heartbeat every 25 calls so we see firing rate
+        if LiveMMRunner._diag_total % 25 == 1:
             log.info(f"[MM] on_book heartbeat: total={LiveMMRunner._diag_total} "
                      f"skipped={LiveMMRunner._diag_skipped} "
                      f"tokens_tracked={len(self._strategies)}")
