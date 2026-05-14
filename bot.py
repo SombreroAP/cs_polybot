@@ -2072,6 +2072,18 @@ class EsportsBot:
                 cur["best_ask"] = book.best_ask
                 cur["timestamp"] = time.time()
                 self.polymarket_ws.prices[tid] = cur
+                # Notify MM (shadow mode) — REST is the primary book-data path
+                # when WS is silent, so this hook is essential or MM never fires.
+                if _MM_AVAILABLE:
+                    try:
+                        match_id = None
+                        for mid, mkt in self.latency_analyzer._match_to_market.items():
+                            if mkt.token_id_a == tid or mkt.token_id_b == tid:
+                                match_id = mid; break
+                        _get_mm_runner().on_book(tid, match_id,
+                                                  book.best_bid, book.best_ask)
+                    except Exception:
+                        pass
                 return True
             except Exception:
                 return False
