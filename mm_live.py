@@ -103,6 +103,25 @@ class LiveMMRunner:
             f"db={self.db_path}  cfg={self.cfg}"
         )
 
+    def _execute_with_retry(self, sql: str, params: tuple = (), max_attempts: int = 5):
+        """Execute a single statement with backoff on busy/locked DB."""
+        last_err = None
+        for attempt in range(max_attempts):
+            try:
+                with self._connect() as c:
+                    c.execute(sql, params)
+                return
+            except sqlite3.OperationalError as e:
+                last_err = e
+                if "locked" in str(e).lower() or "busy" in str(e).lower():
+                    time.sleep(0.05 * (2 ** attempt))  # 50ms, 100ms, 200ms, 400ms, 800ms
+                    continue
+                raise
+            except Exception:
+                raise
+        if last_err:
+            log.debug(f"[MM] exhausted retries on: {sql[:60]}… err={last_err}")
+
     def _connect(self):
         """Open a SQLite connection with WAL mode + lock timeout.
         Critical: trades.db is shared with the bot's other writers, so we MUST
@@ -225,49 +244,41 @@ class LiveMMRunner:
     # ────── DB writers ──────────────────────────────────────────────────
     def _log_decision(self, ts, token_id, match_id, decision,
                       book_bid, book_ask, drift):
-        try:
-            with self._connect() as c:
-                c.execute(
-                    "INSERT INTO mm_decisions "
-                    "(ts, token_id, match_id, action, bid_price, ask_price, "
-                    "book_bid, book_ask, recent_drift_cents, reason) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (ts, token_id, match_id, decision.get("action"),
-                     decision.get("new_bid_price"), decision.get("new_ask_price"),
-                     book_bid, book_ask, drift * 100, decision.get("reason"))
-                )
-        except Exception as e:
-            log.warning(f"[MM] log_decision failed: {e}")
+        self._execute_with_retry(
+            "INSERT INTO mm_decisions "
+            "(ts, token_id, match_id, action, bid_price, ask_price, "
+            "book_bid, book_ask, recent_drift_cents, reason) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (ts, token_id, match_id, decision.get("action"),
+             decision.get("new_bid_price"), decision.get("new_ask_price"),
+             book_bid, book_ask, drift * 100, decision.get("reason"))
+        )
 
     def _log_fill(self, ts, token_id, match_id, side, price, inv_after, cash_after):
-        try:
-            with self._connect() as c:
-                c.execute(
-                    "INSERT INTO mm_fills "
-                    "(ts, token_id, match_id, side, price, sim_inv_after, sim_cash_after) "
-                    "VALUES (?,?,?,?,?,?,?)",
-                    (ts, token_id, match_id, side, price, inv_after, cash_after)
-                )
-            log.info(
-                f"[MM] SIM-FILL {side} on {token_id[:8]}…@{price:.4f}  "
-                f"inv={inv_after}  cash=${cash_after:+.4f}"
-            )
-        except Exception as e:
-            log.warning(f"[MM] log_fill failed: {e}")
+        self._execute_with_retry(
+            "INSERT INTO mm_fills "
+            "(ts, token_id, match_id, side, price, sim_inv_after, sim_cash_after) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (ts, token_id, match_id, side, price, inv_after, cash_after)
+        )
+        log.info(
+            f"[MM] SIM-FILL {side} on {token_id[:8]}…@{price:.4f}  "
+            f"inv={inv_after}  cash=${cash_after:+.4f}"
+        )
 
     def _persist_state(self, strat: MMStrategy):
+        # State row is overwritable; quietly skip on retry exhaustion.
         try:
-            with self._connect() as c:
-                c.execute(
-                    "INSERT OR REPLACE INTO mm_state "
-                    "(token_id, last_update_ts, inventory, cash, n_fills, "
-                    "n_bid_fills, n_ask_fills) VALUES (?,?,?,?,?,?,?)",
-                    (strat.token_id, time.time(),
-                     strat.inventory, strat.cash, strat.n_fills,
-                     strat.n_bid_fills, strat.n_ask_fills)
-                )
+            self._execute_with_retry(
+                "INSERT OR REPLACE INTO mm_state "
+                "(token_id, last_update_ts, inventory, cash, n_fills, "
+                "n_bid_fills, n_ask_fills) VALUES (?,?,?,?,?,?,?)",
+                (strat.token_id, time.time(),
+                 strat.inventory, strat.cash, strat.n_fills,
+                 strat.n_bid_fills, strat.n_ask_fills)
+            )
         except Exception:
-            pass  # don't crash bot on state-persist failure
+            pass
 
     # ────── Stats interface (for dashboard) ─────────────────────────────
     def aggregate_stats(self) -> dict:
