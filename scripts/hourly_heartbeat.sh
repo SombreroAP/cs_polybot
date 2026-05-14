@@ -41,13 +41,31 @@ fi
 shadow_open=$(sqlite3 "$DB" "SELECT COUNT(*) FROM shadow_trades WHERE exit_price IS NULL;" 2>/dev/null || echo 0)
 shadow_total=$(sqlite3 "$DB" "SELECT COUNT(*) FROM shadow_trades;" 2>/dev/null || echo 0)
 
+# 2b. Market-maker stats from dedicated mm.db
+MMDB="data/mm.db"
+mm_dec_1h=$(sqlite3 "$MMDB" "SELECT COUNT(*) FROM mm_decisions WHERE ts > $HOUR_AGO;" 2>/dev/null || echo 0)
+mm_dec_24h=$(sqlite3 "$MMDB" "SELECT COUNT(*) FROM mm_decisions WHERE ts > $DAY_AGO;" 2>/dev/null || echo 0)
+mm_fills_1h=$(sqlite3 "$MMDB" "SELECT COUNT(*) FROM mm_fills WHERE ts > $HOUR_AGO;" 2>/dev/null || echo 0)
+mm_fills_24h=$(sqlite3 "$MMDB" "SELECT COUNT(*) FROM mm_fills WHERE ts > $DAY_AGO;" 2>/dev/null || echo 0)
+# Sim PnL: sum of latest sim_cash_after across tokens that had a fill in last 24h
+mm_pnl_24h=$(sqlite3 "$MMDB" "
+  SELECT COALESCE(ROUND(SUM(c), 2), 0)
+  FROM (
+    SELECT (SELECT sim_cash_after FROM mm_fills f2
+            WHERE f2.token_id = f1.token_id
+            ORDER BY ts DESC LIMIT 1) AS c
+    FROM mm_fills f1
+    WHERE f1.ts > $DAY_AGO
+    GROUP BY token_id
+  );" 2>/dev/null || echo 0)
+
 # 3. Recent errors
 errors_1h=$(awk -v cut="$(date -u -d '1 hour ago' '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -u -v-1H '+%Y-%m-%d %H:%M:%S')" \
   '$0 ~ /ERROR/ && $0 >= cut' _logs/cs2bot.stderr.log 2>/dev/null | wc -l | tr -d ' ' || echo 0)
 
 # 4. Compose
 mode="🔵 SHADOW"
-[ "${SHADOW_TRADING:-true}" = "false" ] && mode="🟢 LIVE"
+[ "${MM_LIVE_TRADING:-false}" = "true" ] && mode="🟢 LIVE"
 
 stale_warn=""
 if [ -n "$last_dec_ago_min" ] && [ "$last_dec_ago_min" -gt 60 ]; then
@@ -57,8 +75,9 @@ fi
 msg="⏱ Hourly heartbeat — $(date -u '+%H:%M UTC')
 
 svc: $svc | mode: $mode
-decisions: ${decisions_1h}/h, ${decisions_24h}/24h (${buys_24h} buys)${stale_warn}
-shadow: ${shadow_open} open, ${shadow_total} total
+MM: ${mm_dec_1h} dec/h, ${mm_fills_1h} fills/h (${mm_dec_24h}/${mm_fills_24h} in 24h)
+sim PnL 24h: \$${mm_pnl_24h}
+legacy decisions: ${decisions_24h}/24h${stale_warn}
 errors last 1h: ${errors_1h}"
 
 curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
