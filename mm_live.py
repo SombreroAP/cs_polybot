@@ -30,8 +30,9 @@ from mm_strategy import MMConfig, MMStrategy
 
 log = logging.getLogger("mm_live")
 
-# Default DB path (overridable in tests)
-DB_PATH = Path(__file__).resolve().parent / "data" / "trades.db"
+# Default DB path — separate file from trades.db to avoid lock contention
+# with the bot's other writers (claude_decisions, shadow_trades).
+DB_PATH = Path(__file__).resolve().parent / "data" / "mm.db"
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -160,11 +161,14 @@ class LiveMMRunner:
                 if "locked" in str(e).lower() or "busy" in str(e).lower():
                     time.sleep(0.05 * (2 ** attempt))  # 50ms, 100ms, 200ms, 400ms, 800ms
                     continue
-                raise
-            except Exception:
-                raise
+                # Non-lock errors get logged at WARNING so they're visible
+                log.warning(f"[MM] write error on {sql[:50]}…: {e}")
+                return
+            except Exception as e:
+                log.warning(f"[MM] unexpected write error on {sql[:50]}…: {e}")
+                return
         if last_err:
-            log.debug(f"[MM] exhausted retries on: {sql[:60]}… err={last_err}")
+            log.warning(f"[MM] exhausted retries on: {sql[:60]}… err={last_err}")
 
     def _connect(self):
         """Open a SQLite connection with WAL mode + lock timeout.
