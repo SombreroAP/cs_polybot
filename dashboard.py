@@ -111,23 +111,58 @@ def api_stream():
 
 @app.route("/api/mm")
 def api_mm():
-    """Market-making (shadow mode) stats — aggregate + top tokens.
-
-    Returns 200 with empty stats if mm_live isn't ready yet so the dashboard
-    can render without errors during bot startup.
-    """
+    """Market-making stats — aggregate + top tokens. Empty if runner not ready."""
     try:
+        import os
         from mm_live import get_runner
         runner = get_runner()
+        stats = runner.aggregate_stats()
+        # Surface the live-trading flag so the dashboard can show LIVE vs SHADOW
+        stats["live_trading"] = os.environ.get("MM_LIVE_TRADING", "false").lower() == "true"
         return jsonify({
-            "stats": runner.aggregate_stats(),
+            "stats": stats,
             "top_tokens": runner.top_tokens(8),
         })
     except Exception as e:
+        return jsonify({"stats": {}, "top_tokens": [], "error": str(e)[:200]})
+
+
+@app.route("/api/mm_feed")
+def api_mm_feed():
+    """Recent MM decisions + fills feed (30 of each)."""
+    try:
+        import sqlite3
+        from mm_live import get_runner
+        runner = get_runner()
+        with sqlite3.connect(str(runner.db_path), timeout=5.0) as c:
+            c.execute("PRAGMA busy_timeout=5000")
+            fills = c.execute(
+                "SELECT ts, token_id, match_id, side, price, "
+                "sim_inv_after, sim_cash_after FROM mm_fills "
+                "ORDER BY ts DESC LIMIT 30"
+            ).fetchall()
+            decisions = c.execute(
+                "SELECT ts, token_id, action, bid_price, ask_price, "
+                "book_bid, book_ask, recent_drift_cents, reason "
+                "FROM mm_decisions ORDER BY ts DESC LIMIT 30"
+            ).fetchall()
         return jsonify({
-            "stats": {}, "top_tokens": [],
-            "error": str(e)[:200],
+            "fills": [
+                {"ts": r[0], "token_id": r[1] or "", "match_id": r[2] or "",
+                 "side": r[3], "price": r[4], "sim_inv_after": r[5],
+                 "sim_cash_after": r[6]}
+                for r in fills
+            ],
+            "decisions": [
+                {"ts": r[0], "token_id": r[1] or "", "action": r[2],
+                 "bid_price": r[3], "ask_price": r[4],
+                 "book_bid": r[5], "book_ask": r[6],
+                 "recent_drift_cents": r[7], "reason": r[8]}
+                for r in decisions
+            ],
         })
+    except Exception as e:
+        return jsonify({"fills": [], "decisions": [], "error": str(e)[:200]})
 
 
 def create_app(bot):

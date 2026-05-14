@@ -48,24 +48,27 @@
         </div>
     </div>
 
+    <!-- TOP-BAR: live market-making KPIs -->
     <div class="grid g5">
         <div class="card">
-            <h2>Balance</h2>
-            <div class="big green" id="bal">$1,000</div>
+            <h2>MM Mode</h2>
+            <div class="big" id="mm-mode">SHADOW</div>
+            <div class="dim" id="mm-mode-detail">no real orders</div>
         </div>
         <div class="card">
-            <h2>P&L</h2>
-            <div class="big" id="pnl">$0.00</div>
-            <div class="dim" id="pnl-pct">0.0%</div>
+            <h2>Sim PnL 24h</h2>
+            <div class="big" id="mm-cash-24h">$0.00</div>
+            <div class="dim" id="mm-cash-life">lifetime: $0</div>
         </div>
         <div class="card">
-            <h2>Trades</h2>
-            <div class="big yellow" id="trades">0</div>
-            <div class="dim" id="wl">0W / 0L</div>
+            <h2>Fills 24h</h2>
+            <div class="big purple" id="mm-fills-24h">0</div>
+            <div class="dim" id="mm-fills-life">0 lifetime</div>
         </div>
         <div class="card">
-            <h2>Win Rate</h2>
-            <div class="big" id="winrate">-</div>
+            <h2>Active Tokens</h2>
+            <div class="big blue" id="mm-tokens">0 / 0</div>
+            <div class="dim">tracked / quoting</div>
         </div>
         <div class="card">
             <h2>Uptime</h2>
@@ -74,49 +77,38 @@
         </div>
     </div>
 
-    <!-- FEEDS -->
+    <!-- MM DETAIL: queue health, drift filter, top tokens -->
     <div class="card full" style="margin-bottom:10px;">
-        <h2>Active Feeds</h2>
-        <div id="feeds"><span class="dim">Connecting...</span></div>
-    </div>
-
-    <!-- MARKET-MAKING (shadow mode) -->
-    <div class="card full" style="margin-bottom:10px;">
-        <h2>Market Making — Shadow Mode <span class="badge badge-dry" style="margin-left:8px;">SIM</span></h2>
-        <div class="grid g4" style="margin-bottom:8px;">
+        <h2>Market Making Details</h2>
+        <div class="grid g4" style="margin-bottom:8px;font-size:11px;">
             <div>
-                <div class="dim">Sim PnL 24h</div>
-                <div class="big" id="mm-cash-24h">$0.00</div>
-            </div>
-            <div>
-                <div class="dim">Fills 24h</div>
-                <div class="big purple" id="mm-fills-24h">0</div>
-                <div class="dim" id="mm-fills-life">0 lifetime</div>
-            </div>
-            <div>
-                <div class="dim">Tokens / Active Quotes</div>
-                <div class="big blue" id="mm-tokens">0 / 0</div>
+                <div class="dim">Avg ¢/fill</div>
+                <div style="font-size:14px;" id="mm-avg-fill">—</div>
             </div>
             <div>
                 <div class="dim">Drift-Filter Pulls 24h</div>
-                <div class="big yellow" id="mm-drift-pulls">0</div>
-                <div class="dim" id="mm-decisions-24h">0 decisions</div>
+                <div style="font-size:14px;" class="yellow" id="mm-drift-pulls">0</div>
+                <div class="dim" id="mm-decisions-24h">0 decisions 24h</div>
+            </div>
+            <div>
+                <div class="dim">Worker Queue</div>
+                <div style="font-size:14px;" id="mm-queue">0</div>
+                <div class="dim" id="mm-queue-drop">0 dropped lifetime</div>
+            </div>
+            <div>
+                <div class="dim">Hook Calls Total</div>
+                <div style="font-size:14px;" id="mm-diag-total">0</div>
+                <div class="dim" id="mm-diag-skip">0 skipped</div>
             </div>
         </div>
-        <div class="dim">Top tokens (lifetime fills):</div>
+        <div class="dim" style="margin-top:6px;">Top tokens by lifetime fills:</div>
         <div id="mm-top"><div class="dim">No fills yet — bot is observing</div></div>
     </div>
 
-    <!-- OPEN POSITIONS -->
+    <!-- FEEDS / matches being recorded -->
     <div class="card full" style="margin-bottom:10px;">
-        <h2>Open Positions <span class="dim">(auto-exit: TP +7.5% / SL -12.5% / no timeout)</span></h2>
-        <div id="positions" class="scroll"><div class="no-data">Waiting for fills...</div></div>
-    </div>
-
-    <!-- AI ANALYSIS (moved here — right below positions) -->
-    <div class="card full" style="margin-bottom:10px;">
-        <h2>AI Analysis (Hybrid Model) <span class="dim" id="claude-stats">0 calls | $0.00</span></h2>
-        <div id="claude-decisions" class="scroll" style="max-height:250px;"><div class="no-data">Waiting for event clusters...</div></div>
+        <h2>Game Feeds</h2>
+        <div id="feeds"><span class="dim">Connecting...</span></div>
     </div>
 
     <!-- LIVE MATCHES -->
@@ -133,30 +125,28 @@
         <div id="upcoming-list" style="display:none;" class="scroll"><div class="no-data">No upcoming games</div></div>
     </div>
 
-    <!-- TRADE HISTORY -->
+    <!-- RECENT MM FILLS -->
     <div class="card full" style="margin-bottom:10px;">
-        <h2>Trade History</h2>
-        <div class="scroll">
+        <h2>Recent MM Fills <span class="dim" id="fills-recent-count"></span></h2>
+        <div class="scroll" style="max-height:250px;">
             <table>
-                <thead><tr><th>Time</th><th>Exit</th><th>Team</th><th>Game</th><th>Stake</th><th>Buy</th><th>Sell</th><th>P&L</th><th>Trigger</th></tr></thead>
-                <tbody id="history"></tbody>
+                <thead><tr><th>Time</th><th>Token</th><th>Side</th><th>Price</th><th>Inv after</th><th>Cash after</th></tr></thead>
+                <tbody id="mm-fills-feed"></tbody>
             </table>
-            <div id="no-history" class="no-data">No trades yet</div>
+            <div id="no-mm-fills" class="no-data">No fills yet</div>
         </div>
     </div>
 
-    <!-- AI Analysis moved above Live Matches -->
-
-    <!-- PRICE IMPACT ANALYSIS -->
+    <!-- RECENT MM DECISIONS -->
     <div class="card full" style="margin-bottom:10px;">
-        <h2>Price Impact Analysis <span class="dim">(how events move the market over time)</span></h2>
-        <div id="impact-summary" class="scroll" style="max-height:200px;"><div class="no-data">Collecting data...</div></div>
-    </div>
-
-    <!-- EVENT FEED -->
-    <div class="card full">
-        <h2>Edge Events <span class="dim">(green = faster than market)</span></h2>
-        <div id="events" class="scroll" style="max-height:250px;"><div class="no-data">Waiting for events...</div></div>
+        <h2>Recent MM Decisions <span class="dim">(latest 30, quote / cancel / drift-pull)</span></h2>
+        <div class="scroll" style="max-height:250px;">
+            <table>
+                <thead><tr><th>Time</th><th>Token</th><th>Action</th><th>Our Bid</th><th>Our Ask</th><th>Book Bid/Ask</th><th>Drift¢</th><th>Reason</th></tr></thead>
+                <tbody id="mm-decisions-feed"></tbody>
+            </table>
+            <div id="no-mm-decisions" class="no-data">No decisions yet</div>
+        </div>
     </div>
 
     <!-- RAW GAME FEED -->
@@ -192,34 +182,13 @@
             document.getElementById('mode').textContent = d.mode || 'DRY-RUN';
             document.getElementById('status').textContent = d.status || '---';
 
-            // Stats
-            var bal = ts.balance || 1000;
-            var start = ts.starting_balance || 1000;
-            var pnl = bal - start;
-            document.getElementById('bal').textContent = '$' + bal.toFixed(2);
-            document.getElementById('bal').className = 'big ' + (pnl >= 0 ? 'green' : 'red');
-            document.getElementById('pnl').textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2);
-            document.getElementById('pnl').className = 'big ' + (pnl >= 0 ? 'green' : 'red');
-            document.getElementById('pnl-pct').textContent = (pnl / start * 100).toFixed(1) + '%';
-
-            // Prefer server-side lifetime counters; fall back to recent_trades (capped at 100).
-            var resolved = trades.filter(function(t){return t.resolved});
-            var winsLocal = resolved.filter(function(t){return t.pnl > 0}).length;
-            var totalTrades = (ts.total_trades != null) ? ts.total_trades : resolved.length;
-            var wins = (ts.wins != null) ? ts.wins : winsLocal;
-            var losses = (ts.losses != null) ? ts.losses : (resolved.length - winsLocal);
-            var resolvedCount = wins + losses;
-            document.getElementById('trades').textContent = totalTrades;
-            document.getElementById('wl').textContent = wins + 'W / ' + losses + 'L';
-            document.getElementById('winrate').textContent = resolvedCount > 0 ? (wins/resolvedCount*100).toFixed(0) + '%' : '-';
-            document.getElementById('winrate').className = 'big ' + (wins > losses ? 'green' : wins < losses ? 'red' : 'yellow');
-
+            // Top-bar MM stats are populated by pollMM (5s cadence below).
+            // Uptime + markets count come from state poll.
             var sec = Math.floor(d.uptime_seconds || 0);
             document.getElementById('uptime').textContent = Math.floor(sec/3600) + ':' + String(Math.floor((sec%3600)/60)).padStart(2,'0') + ':' + String(sec%60).padStart(2,'0');
             var cs = d.claude_stats || {};
             var wsOk = cs.ws_connected && cs.ws_fresh;
-            document.getElementById('mkts').textContent = (d.markets_tracked || 0) + ' markets';
-            document.getElementById('mkts').innerHTML = (d.markets_tracked || 0) + ' mkts | <span style="color:' + (wsOk ? '#4ade80' : '#f87171') + ';">' + (wsOk ? 'WS LIVE' : 'WS OFF') + '</span> ' + (cs.ws_messages || 0) + ' msgs';
+            document.getElementById('mkts').innerHTML = (d.markets_tracked || 0) + ' mkts | <span style="color:' + (wsOk ? '#4ade80' : '#f87171') + ';">' + (wsOk ? 'WS LIVE' : 'WS OFF') + '</span>';
 
             // Feeds
             var fc = d.feeds_connected || {};
@@ -232,24 +201,10 @@
                 }).join(' ');
             }
 
-            // Open positions
-            var open = trades.filter(function(t){return !t.resolved});
-            var posEl = document.getElementById('positions');
-            if (open.length) {
-                posEl.innerHTML = '<table><tr><th>Team</th><th>Game</th><th>Bet</th><th>Buy</th><th>Now</th><th>P&L%</th><th>Trigger</th><th>Age</th></tr>' +
-                    open.map(function(t) {
-                        var pnlPct = t.pnl ? (t.pnl / t.amount * 100).toFixed(1) : '0.0';
-                        var pc = t.pnl > 0 ? 'green' : t.pnl < 0 ? 'red' : 'yellow';
-                        var age = t.age || 0;
-                        var ageStr = age > 3600 ? Math.floor(age/3600) + 'h' + Math.floor((age%3600)/60) + 'm' : age > 60 ? Math.floor(age/60) + 'm' + Math.floor(age%60) + 's' : Math.round(age) + 's';
-                        var trigger = t.trigger_event || '';
-                        var currentPrice = t.amount > 0 && t.shares > 0 ? (t.pnl / t.shares + t.fill_price) : t.fill_price;
-                        var cpColor = currentPrice > t.fill_price ? 'green' : currentPrice < t.fill_price ? 'red' : 'yellow';
-                        return '<tr><td>' + t.team + '</td><td><span class="chip chip-' + (t.game||'cs2') + '">' + (t.game||'?').toUpperCase() + '</span></td><td>$' + t.amount.toFixed(2) + '</td><td>$' + t.fill_price.toFixed(3) + '</td><td class="' + cpColor + '" style="font-weight:700;">$' + currentPrice.toFixed(3) + '</td><td class="' + pc + '">' + pnlPct + '%</td><td class="dim" style="font-size:9px;max-width:150px;overflow:hidden;text-overflow:ellipsis;">' + trigger + '</td><td class="dim">' + ageStr + '</td></tr>';
-                    }).join('') + '</table>';
-            } else {
-                posEl.innerHTML = '<div class="no-data">No open positions — waiting for edge signals</div>';
-            }
+            // Open positions / claude / impact / history panels removed
+            // — those were from the deprecated directional-betting era.
+            // MM stats now drive the dashboard via pollMM + pollMMFeed.
+
 
             // Live matches — show ALL active matches (already filtered upstream to linked markets).
             // Sort live ones by most recent event first; upcoming sorted to bottom.
@@ -395,199 +350,7 @@
                 upEl.innerHTML = '<div class="no-data">No upcoming games</div>';
             }
 
-            // Claude Edge Analysis
-            var claudeEl = document.getElementById('claude-decisions');
-            var claudeStats = document.getElementById('claude-stats');
-            var ecCalls = cs.edge_claude_calls || 0;
-            var ecCost = cs.edge_claude_cost || 0;
-            var ecDecisions = cs.edge_claude_decisions || [];
-            claudeStats.textContent = ecCalls + ' calls | $' + ecCost.toFixed(4) + ' | ' + cs.edge_claude_cache_hits + ' cached';
-            // Filter noise: SKIPs on untradable/out-of-range markets are useless clutter
-            ecDecisions = ecDecisions.filter(function(d){
-                var r = (d.reason || '').toLowerCase();
-                if (d.action === 'skip' && (
-                    r.indexOf('untradable') !== -1 ||
-                    r.indexOf('ask=0') !== -1 ||
-                    r.indexOf('ask is 0') !== -1 ||
-                    r.indexOf('no liquidity') !== -1 ||
-                    r.indexOf('stale') !== -1 ||
-                    r.indexOf('out of range') !== -1
-                )) return false;
-                return true;
-            });
-            if (ecDecisions.length) {
-                claudeEl.innerHTML = ecDecisions.slice().reverse().map(function(d) {
-                    var t = new Date(d.time * 1000);
-                    var ts = t.getHours().toString().padStart(2,'0') + ':' + t.getMinutes().toString().padStart(2,'0') + ':' + t.getSeconds().toString().padStart(2,'0');
-                    var actionColor = d.action === 'buy' ? '#4ade80' : '#f87171';
-                    var actionLabel = d.action === 'buy' ? 'BUY' : 'SKIP';
-                    var confBar = Math.round(d.confidence * 100);
-                    var confColor = d.confidence >= 0.8 ? '#4ade80' : d.confidence >= 0.6 ? '#fbbf24' : '#f87171';
-                    var isLocal = (d.cost || 0) === 0;
-                    // Model label: use the actual model name from the backend (qwen3:30b-a3b, gemma4, claude-haiku, etc.)
-                    var modelName = (d.model || '').toString();
-                    var modelLabel;
-                    if (modelName.indexOf('qwen') !== -1) modelLabel = 'QWEN 3 \u26A1';
-                    else if (modelName.indexOf('esports-noThink') !== -1) modelLabel = 'ESPORTS-FT \u26A1';
-                    else if (modelName.indexOf('gemma') !== -1) modelLabel = 'GEMMA 4 \u26A1';
-                    else if (modelName.indexOf('claude') !== -1) modelLabel = 'CLAUDE API';
-                    else modelLabel = isLocal ? (modelName.toUpperCase() + ' \u26A1') : 'CLAUDE API';
-                    var badgeColor = isLocal ? '#7c3aed' : '#2563eb';
-                    var modelBadge = '<span style="background:' + badgeColor + ';color:#fff;padding:1px 5px;border-radius:3px;font-size:8px;margin-left:4px;">' + modelLabel + '</span>';
-                    var latencyStr = isLocal ? '' : '';
-                    return '<div style="background:#1a1a24;border:1px solid ' + (d.action === 'buy' ? '#2a5a2a' : '#3a2a2a') + ';border-radius:5px;padding:6px 10px;margin-bottom:4px;">' +
-                        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-                        '<span><span class="dim">' + ts + '</span> <span class="chip chip-' + d.game + '">' + d.game.toUpperCase() + '</span> ' + d.team + modelBadge + '</span>' +
-                        '<span style="color:' + actionColor + ';font-weight:700;">' + actionLabel + ' <span style="color:' + confColor + ';">' + confBar + '%</span></span>' +
-                        '</div>' +
-                        '<div style="margin-top:3px;">' +
-                        '<div style="background:#0a0a0f;border-radius:2px;height:4px;width:100%;"><div style="background:' + confColor + ';height:100%;width:' + confBar + '%;border-radius:2px;"></div></div>' +
-                        '</div>' +
-                        '<div style="font-size:11px;color:#ccc;margin-top:4px;line-height:1.4;word-wrap:break-word;">' + d.reason + '</div>' +
-                        '<div class="dim" style="font-size:9px;margin-top:2px;">' + d.events + ' events analyzed | ' + (isLocal ? 'LOCAL GPU \u26A1 $0' : '$' + (d.cost||0).toFixed(4)) + '</div>' +
-                        '</div>';
-                }).join('');
-            }
-
-            // Price Impact Analysis
-            var impSum = d.impact_summary || {};
-            var impEl = document.getElementById('impact-summary');
-            var impKeys = Object.keys(impSum);
-            if (impKeys.length) {
-                var ih = '<table><tr><th>Event</th><th>N</th><th>5s</th><th>15s</th><th>30s</th><th>45s</th><th>60s</th><th>90s</th><th>Max</th></tr>';
-                impKeys.sort(function(a,b) { return (impSum[b].avg_move_90s||impSum[b].avg_move_30s||0) - (impSum[a].avg_move_90s||impSum[a].avg_move_30s||0); });
-                for (var ik = 0; ik < impKeys.length; ik++) {
-                    var s = impSum[impKeys[ik]];
-                    var chip = '<span class="chip chip-' + s.game + '">' + s.game.toUpperCase() + '</span>';
-                    ih += '<tr><td>' + chip + ' ' + s.event_type + '</td><td>' + s.count + '</td>';
-                    ih += '<td>' + (s.avg_move_5s||0).toFixed(1) + '%</td>';
-                    ih += '<td>' + (s.avg_move_15s||0).toFixed(1) + '%</td>';
-                    ih += '<td>' + (s.avg_move_30s||0).toFixed(1) + '%</td>';
-                    ih += '<td>' + (s.avg_move_45s||0).toFixed(1) + '%</td>';
-                    ih += '<td>' + (s.avg_move_60s||0).toFixed(1) + '%</td>';
-                    var m90 = (s.avg_move_90s||0).toFixed(1);
-                    var m90color = parseFloat(m90) > 5 ? 'green' : parseFloat(m90) > 2 ? 'yellow' : 'dim';
-                    ih += '<td class="' + m90color + '" style="font-weight:700;">' + m90 + '%</td>';
-                    ih += '<td class="dim">' + (s.max_move||0).toFixed(1) + '%</td></tr>';
-                }
-                impEl.innerHTML = ih + '</table>';
-            }
-
-            // Trade history with expandable Claude analysis
-            // Track which rows are expanded (persists across poll refreshes)
-            if (!window._expandedTrades) window._expandedTrades = {};
-            var hist = document.getElementById('history');
-            var nh = document.getElementById('no-history');
-            if (resolved.length) {
-                nh.style.display = 'none';
-                hist.innerHTML = resolved.slice().reverse().map(function(t, idx) {
-                    var er = t.exit_reason || 'resolution';
-                    var badge = er === 'take_profit' ? '<span class="tp">TP</span>' :
-                                er === 'stop_loss' ? '<span class="sl">SL</span>' :
-                                er === 'time_exit' ? '<span class="te">TIME</span>' : '<span class="res">RES</span>';
-                    var pnl = t.pnl || 0;
-                    var pl = '<span class="' + (pnl>=0?'green':'red') + '">' + (pnl>=0?'+':'') + '$' + pnl.toFixed(2) + '</span>';
-                    var trigger = t.trigger_event || '';
-                    var sellStr = t.sell_price > 0 ? '$' + t.sell_price.toFixed(3) : '-';
-                    var pnlPct = t.amount > 0 ? (pnl / t.amount * 100).toFixed(1) : '0';
-                    var tradeTime = t.time ? new Date(t.time * 1000) : null;
-                    var timeStr = tradeTime ? tradeTime.getHours().toString().padStart(2,'0') + ':' + tradeTime.getMinutes().toString().padStart(2,'0') : '-';
-                    var rowId = 'td-' + idx;
-                    // Extract clean trigger text for display
-                    var triggerShort = '';
-                    if (trigger) {
-                        // Parse "CLAUDE: 95% | reason text | buy@0.520" or "ANALYZER: 90% | reason"
-                        var trigParts = trigger.split('|');
-                        if (trigParts.length >= 2) triggerShort = trigParts[1].trim().substring(0, 35);
-                        else triggerShort = trigger.substring(0, 35);
-                    }
-                    var hasDetail = true; // always show dropdown
-                    var isOpen = window._expandedTrades[rowId] || false;
-                    var arrow = isOpen ? '\u25BC' : '\u25B6';
-                    // Build detail content
-                    var detailContent = '';
-                    var a = t.analysis || {};
-                    var parts = [];
-                    // Full reasoning
-                    var reason = a.reason || trigger || 'No analysis recorded';
-                    // Prefer the model name stamped on the decision itself; otherwise infer.
-                    var modelName = (a.model || '').toString();
-                    var aModel;
-                    if (modelName) {
-                        if (modelName.indexOf('qwen') !== -1) aModel = 'Qwen 3 \u26A1';
-                        else if (modelName.indexOf('gemma') !== -1) aModel = 'Gemma 4 \u26A1';
-                        else if (modelName.indexOf('esports-noThink') !== -1) aModel = 'Esports-FT \u26A1';
-                        else if (modelName.indexOf('claude') !== -1) aModel = 'Claude API';
-                        else aModel = modelName + ' \u26A1';
-                    } else {
-                        // Legacy rows (pre-model-stamping): infer from trigger text
-                        var trig = trigger || '';
-                        aModel = (trig.indexOf('$0.000') > -1 || trig.indexOf('ANALYZER') > -1) ? 'Local GPU \u26A1' : 'Claude API';
-                    }
-                    parts.push('<div style="margin-bottom:6px;"><b style="color:#4ade80;">AI Analysis (' + aModel + '):</b> ' + reason + '</div>');
-                    var metaLine = [];
-                    if (a.confidence) metaLine.push('Confidence: ' + (a.confidence * 100).toFixed(0) + '%');
-                    if (a.events_analyzed) metaLine.push('Events analyzed: ' + a.events_analyzed);
-                    metaLine.push('Entry: $' + t.fill_price.toFixed(3));
-                    if (t.sell_price > 0) metaLine.push('Exit: $' + t.sell_price.toFixed(3));
-                    if (t.edge) metaLine.push('Edge: ' + (t.edge*100).toFixed(1) + '%');
-                    if (metaLine.length) parts.push('<div style="color:#fbbf24;font-size:10px;">' + metaLine.join(' | ') + '</div>');
-                    if (a.game_state) {
-                        var gs = a.game_state;
-                        var gsLine = '<div style="margin-top:4px;color:#aaa;font-size:10px;">Game: ' + (gs.team_a||'?') + ' vs ' + (gs.team_b||'?');
-                        if (gs.score_a !== undefined) gsLine += ' | Series: ' + gs.score_a + '-' + gs.score_b;
-                        if (gs.round_a !== undefined && gs.round_a > 0) gsLine += ' | Round: ' + gs.round_a + '-' + gs.round_b;
-                        if (gs.economy_a > 0) gsLine += ' | Economy: $' + (gs.economy_a/1000).toFixed(1) + 'k vs $' + (gs.economy_b/1000).toFixed(1) + 'k';
-                        if (gs.kills_a > 0) gsLine += ' | Kills: ' + gs.kills_a + '-' + gs.kills_b;
-                        if (gs.gold_lead) gsLine += ' | Gold: ' + (gs.gold_lead > 0 ? '+' : '') + gs.gold_lead.toLocaleString();
-                        gsLine += '</div>';
-                        parts.push(gsLine);
-                    }
-                    if (a.market_state) {
-                        var ms = a.market_state;
-                        parts.push('<div style="margin-top:2px;color:#aaa;font-size:10px;">Market: price=' + (ms.price*100).toFixed(1) + '\u00a2 bid=' + (ms.bid*100).toFixed(1) + '\u00a2 ask=' + (ms.ask*100).toFixed(1) + '\u00a2 spread=' + ((ms.spread||0)*100).toFixed(1) + '\u00a2 | ' + (ms.question||'') + '</div>');
-                    }
-                    if (a.event_window && a.event_window.length) {
-                        parts.push('<div style="margin-top:4px;color:#888;font-size:9px;">Events: ' + a.event_window.map(function(e){return '<span style="color:' + (e.team==='a'?'#4ade80':e.team==='b'?'#f87171':'#888') + ';">[' + e.type + '] ' + (e.desc||'').substring(0,40) + '</span>';}).join(' \u2192 ') + '</div>');
-                    }
-                    detailContent = parts.join('');
-                    var detailRow = hasDetail ? '<tr id="' + rowId + '" style="display:' + (isOpen ? 'table-row' : 'none') + ';"><td colspan="9"><div style="background:#0d0d18;border:1px solid #1a1a2e;border-radius:4px;padding:10px 14px;margin:2px 0;font-size:12px;line-height:1.6;word-wrap:break-word;white-space:normal;">' + detailContent + '</div></td></tr>' : '';
-                    return '<tr style="cursor:' + (hasDetail?'pointer':'default') + ';" onclick="if(!this.nextElementSibling)return;var s=this.nextElementSibling.style;var open=s.display!==\'none\';s.display=open?\'none\':\'table-row\';window._expandedTrades[\'' + rowId + '\']=!open;this.querySelector(\'.arrow\').textContent=open?\'\u25B6\':\'\u25BC\';if(!open)this.nextElementSibling.scrollIntoView({block:\'nearest\',behavior:\'smooth\'});"><td class="dim">' + timeStr + '</td><td>' + badge + '</td><td><span class="arrow" style="color:#60a5fa;margin-right:4px;">' + arrow + '</span>' + t.team + '</td><td><span class="chip chip-' + (t.game||'cs2') + '">' + (t.game||'?').toUpperCase() + '</span></td><td>$' + t.amount.toFixed(2) + '</td><td>$' + t.fill_price.toFixed(3) + '</td><td>' + sellStr + '</td><td>' + pl + ' <span class="dim">(' + (pnl>=0?'+':'') + pnlPct + '%)</span></td><td class="dim" style="font-size:9px;max-width:150px;overflow:hidden;text-overflow:ellipsis;">' + (triggerShort || '-') + '</td></tr>' + detailRow;
-                }).join('');
-            } else { nh.style.display = ''; }
-
-            // Events
-            var evts = d.recent_events || [];
-            var ef = document.getElementById('events');
-            if (evts.length) {
-                ef.innerHTML = evts.slice().reverse().slice(0, 50).map(function(e) {
-                    var t = new Date(e.time * 1000);
-                    var ts = t.getHours().toString().padStart(2,'0') + ':' + t.getMinutes().toString().padStart(2,'0') + ':' + t.getSeconds().toString().padStart(2,'0');
-                    var speedClass = e.faster === true ? 'green' : e.faster === false ? 'red' : 'dim';
-                    var edgeStr = e.edge ? (e.edge > 0 ? '+' : '') + (e.edge * 100).toFixed(1) + '%' : '';
-                    // Event type badge
-                    var etype = e.type || '';
-                    var typeBadge = '';
-                    var typeColor = '#555';
-                    if (etype === 'round_end') { typeBadge = 'RND'; typeColor = '#fbbf24'; }
-                    else if (etype === 'map_win') { typeBadge = 'MAP'; typeColor = '#4ade80'; }
-                    else if (etype === 'match_end') { typeBadge = 'END'; typeColor = '#f87171'; }
-                    else if (etype === 'score_update') { typeBadge = 'UPD'; typeColor = '#60a5fa'; }
-                    else if (etype === 'objective_taken') { typeBadge = 'OBJ'; typeColor = '#22d3ee'; }
-                    else if (etype === 'teamfight_won') { typeBadge = 'FIGHT'; typeColor = '#e879f9'; }
-                    else if (etype === 'economy_shift') { typeBadge = 'ECO'; typeColor = '#a78bfa'; }
-                    else if (etype === 'kill_streak') { typeBadge = 'KILLS'; typeColor = '#fb923c'; }
-                    else if (etype.indexOf('exit_') === 0) { typeBadge = 'EXIT'; typeColor = '#f59e0b'; }
-                    else { typeBadge = etype.substring(0,4).toUpperCase(); }
-                    var badge = '<span style="background:' + typeColor + '22;color:' + typeColor + ';font-size:8px;padding:1px 4px;border-radius:2px;font-weight:700;min-width:35px;display:inline-block;text-align:center;">' + typeBadge + '</span>';
-                    // Market info
-                    var mktStr = '';
-                    if (e.has_market && e.our_prob > 0) {
-                        mktStr = '<span class="dim" style="min-width:80px;text-align:right;">us:' + (e.our_prob*100).toFixed(0) + '% mkt:' + (e.market_prob*100).toFixed(0) + '%</span>';
-                    }
-                    return '<div class="evt"><span class="evt-time">' + ts + '</span>' + badge + '<span class="chip chip-' + (e.game||'cs2') + '">' + (e.game||'?').toUpperCase() + '</span><span class="evt-desc">' + (e.description||etype) + '</span>' + mktStr + '<span class="' + speedClass + '" style="min-width:50px;text-align:right;font-weight:600;">' + edgeStr + '</span></div>';
-                }).join('');
-            }
+            // (removed: Claude AI / impact / trade history / events panels — directional-betting era)
 
             // Raw Game Feed — ALL events from ALL feeds
             var rawFeed = d.raw_feed_events || [];
@@ -632,24 +395,46 @@
                 .then(function(d) {
                     if (!d) return;
                     var s = d.stats || {};
+                    var modeEl = document.getElementById('mm-mode');
+                    if (!modeEl) return;
+                    // Mode banner
+                    var live = s.live_trading || false;
+                    modeEl.textContent = live ? 'LIVE' : 'SHADOW';
+                    modeEl.className = 'big ' + (live ? 'red' : 'blue');
+                    document.getElementById('mm-mode-detail').textContent =
+                        live ? 'REAL ORDERS' : 'no real orders';
+                    // Cash 24h / lifetime
                     var c = s.cash_24h || 0;
                     var cashEl = document.getElementById('mm-cash-24h');
-                    if (!cashEl) return;
                     cashEl.textContent = (c >= 0 ? '+$' : '-$') + Math.abs(c).toFixed(4);
                     cashEl.className = 'big ' + (c >= 0 ? 'green' : 'red');
+                    var lc = s.total_sim_cash_pnl || 0;
+                    document.getElementById('mm-cash-life').textContent =
+                        'lifetime: ' + (lc >= 0 ? '+$' : '-$') + Math.abs(lc).toFixed(2);
+                    // Fills
                     document.getElementById('mm-fills-24h').textContent = (s.fills_24h || 0);
                     document.getElementById('mm-fills-life').textContent =
-                        (s.total_fills_lifetime || 0) + ' lifetime  ·  avg ' +
-                        (s.avg_pnl_per_fill_cents || 0).toFixed(2) + '¢/fill';
+                        (s.total_fills_lifetime || 0) + ' lifetime';
+                    // Tokens
                     document.getElementById('mm-tokens').textContent =
                         (s.n_tokens_tracked || 0) + ' / ' + (s.active_quotes_now || 0);
+                    // Detail row
+                    document.getElementById('mm-avg-fill').textContent =
+                        (s.avg_pnl_per_fill_cents || 0).toFixed(2) + '¢';
                     document.getElementById('mm-drift-pulls').textContent = (s.drift_filter_pulls_24h || 0);
                     document.getElementById('mm-decisions-24h').textContent =
-                        (s.decisions_24h || 0) + ' decisions';
+                        (s.decisions_24h || 0) + ' decisions 24h';
+                    document.getElementById('mm-queue').textContent = (s.queue_depth || 0);
+                    document.getElementById('mm-queue-drop').textContent =
+                        (s.queue_dropped_lifetime || 0) + ' dropped lifetime';
+                    document.getElementById('mm-diag-total').textContent = (s.diag_total_calls || 0);
+                    document.getElementById('mm-diag-skip').textContent =
+                        (s.diag_skipped || 0) + ' skipped';
+                    // Top tokens
                     var top = d.top_tokens || [];
                     var topDiv = document.getElementById('mm-top');
                     if (!top.length) {
-                        topDiv.innerHTML = '<div class="dim">No fills yet — bot is observing</div>';
+                        topDiv.innerHTML = '<div class="dim">No fills yet — waiting on linked markets</div>';
                     } else {
                         topDiv.innerHTML = top.map(function(t) {
                             var color = t.cash >= 0 ? 'green' : 'red';
@@ -666,6 +451,56 @@
         }
         pollMM();
         setInterval(pollMM, 5000);
+
+        // Recent MM decisions + fills (10s cadence)
+        function pollMMFeed() {
+            fetch('/api/mm_feed').then(function(r){return r.json();}).then(function(d){
+                if (!d) return;
+                var fillsT = document.getElementById('mm-fills-feed');
+                var noFills = document.getElementById('no-mm-fills');
+                var fills = d.fills || [];
+                document.getElementById('fills-recent-count').textContent = fills.length + ' shown';
+                if (!fills.length) {
+                    fillsT.innerHTML = '';
+                    noFills.style.display = '';
+                } else {
+                    noFills.style.display = 'none';
+                    fillsT.innerHTML = fills.map(function(f){
+                        var tm = new Date(f.ts * 1000);
+                        var hh = String(tm.getHours()).padStart(2,'0') + ':' + String(tm.getMinutes()).padStart(2,'0') + ':' + String(tm.getSeconds()).padStart(2,'0');
+                        var sideC = f.side === 'bid_fill' ? 'green' : 'red';
+                        var cashC = f.sim_cash_after >= 0 ? 'green' : 'red';
+                        return '<tr><td>' + hh + '</td><td>…' + f.token_id.substr(-10) + '</td>' +
+                               '<td class="' + sideC + '">' + f.side + '</td><td>' + f.price.toFixed(4) + '</td>' +
+                               '<td>' + f.sim_inv_after + '</td><td class="' + cashC + '">$' + f.sim_cash_after.toFixed(4) + '</td></tr>';
+                    }).join('');
+                }
+                var decT = document.getElementById('mm-decisions-feed');
+                var noDec = document.getElementById('no-mm-decisions');
+                var decs = d.decisions || [];
+                if (!decs.length) {
+                    decT.innerHTML = '';
+                    noDec.style.display = '';
+                } else {
+                    noDec.style.display = 'none';
+                    decT.innerHTML = decs.map(function(de){
+                        var tm = new Date(de.ts * 1000);
+                        var hh = String(tm.getHours()).padStart(2,'0') + ':' + String(tm.getMinutes()).padStart(2,'0') + ':' + String(tm.getSeconds()).padStart(2,'0');
+                        var actC = de.action === 'cancel_all' ? 'yellow' : 'green';
+                        return '<tr><td>' + hh + '</td><td>…' + de.token_id.substr(-10) + '</td>' +
+                               '<td class="' + actC + '">' + de.action + '</td>' +
+                               '<td>' + (de.bid_price != null ? de.bid_price.toFixed(4) : '—') + '</td>' +
+                               '<td>' + (de.ask_price != null ? de.ask_price.toFixed(4) : '—') + '</td>' +
+                               '<td>' + (de.book_bid != null ? de.book_bid.toFixed(3) : '—') + ' / ' +
+                                       (de.book_ask != null ? de.book_ask.toFixed(3) : '—') + '</td>' +
+                               '<td>' + (de.recent_drift_cents != null ? de.recent_drift_cents.toFixed(2) : '—') + '</td>' +
+                               '<td class="dim">' + (de.reason || '') + '</td></tr>';
+                    }).join('');
+                }
+            }).catch(function(){});
+        }
+        pollMMFeed();
+        setInterval(pollMMFeed, 10000);
 
         // Terminal log feed
         function pollLogs() {
