@@ -2060,18 +2060,14 @@ class EsportsBot:
                                             )
                                     except Exception as _mme:
                                         logger.warning(f"[MM] price-updater hook err: {_mme}")
-                        # Diagnostic — log once per iteration so we know the
-                        # loop is reaching the MM hook (debug; revert after).
-                        if _update_count % 30 == 1:
-                            logger.info(
-                                f"[MM-DIAG] price-updater iter: linked={len(linked)} "
-                                f"updated={updated} _MM_AVAILABLE={_MM_AVAILABLE}"
-                            )
                             except Exception:
                                 pass
                         _update_count += 1
                         if _update_count % 30 == 1:  # log once per 30s instead of per 30 cycles
-                            logger.info(f"[PRICES] Updated {updated}/{len(linked)} markets")
+                            logger.info(
+                                f"[PRICES] Updated {updated}/{len(linked)} markets "
+                                f"[MM-DIAG _MM_AVAILABLE={_MM_AVAILABLE}]"
+                            )
                 except Exception as e:
                     logger.error(f"[PRICES] Error: {e}")
                 # Target 1s loop — adjust sleep so total iteration is ≈1s, never 0
