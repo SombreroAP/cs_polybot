@@ -109,6 +109,27 @@ def api_stream():
     return app.response_class(response=state_json, status=200, mimetype='application/json')
 
 
+@app.route("/api/mm")
+def api_mm():
+    """Market-making (shadow mode) stats — aggregate + top tokens.
+
+    Returns 200 with empty stats if mm_live isn't ready yet so the dashboard
+    can render without errors during bot startup.
+    """
+    try:
+        from mm_live import get_runner
+        runner = get_runner()
+        return jsonify({
+            "stats": runner.aggregate_stats(),
+            "top_tokens": runner.top_tokens(8),
+        })
+    except Exception as e:
+        return jsonify({
+            "stats": {}, "top_tokens": [],
+            "error": str(e)[:200],
+        })
+
+
 def create_app(bot):
     """Create Flask app wired to the bot."""
     bot.on_state_change(push_state)

@@ -95,6 +95,33 @@
         </div>
     </div>
 
+    <!-- MARKET-MAKING (shadow mode) -->
+    <div class="card full" style="margin-bottom:10px;">
+        <h2>Market Making — Shadow Mode <span class="badge badge-dry" style="margin-left:8px;">SIM</span></h2>
+        <div class="grid g4" style="margin-bottom:8px;">
+            <div>
+                <div class="dim">Sim PnL 24h</div>
+                <div class="big" id="mm-cash-24h">$0.00</div>
+            </div>
+            <div>
+                <div class="dim">Fills 24h</div>
+                <div class="big purple" id="mm-fills-24h">0</div>
+                <div class="dim" id="mm-fills-life">0 lifetime</div>
+            </div>
+            <div>
+                <div class="dim">Tokens / Active Quotes</div>
+                <div class="big blue" id="mm-tokens">0 / 0</div>
+            </div>
+            <div>
+                <div class="dim">Drift-Filter Pulls 24h</div>
+                <div class="big yellow" id="mm-drift-pulls">0</div>
+                <div class="dim" id="mm-decisions-24h">0 decisions</div>
+            </div>
+        </div>
+        <div class="dim">Top tokens (lifetime fills):</div>
+        <div id="mm-top"><div class="dim">No fills yet</div></div>
+    </div>
+
     <!-- OPEN POSITIONS -->
     <div class="card full" style="margin-bottom:10px;">
         <h2>Open Positions</h2>
@@ -577,6 +604,47 @@
         }
         poll();
         setInterval(poll, 2000);
+
+        // --- MM stats polling (every 5s — DB-backed, no need for high freq) ---
+        function pollMM() {
+            fetch('/api/mm')
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (!d) return;
+                    var s = d.stats || {};
+                    var c = s.cash_24h || 0;
+                    var cashEl = document.getElementById('mm-cash-24h');
+                    cashEl.textContent = (c >= 0 ? '+$' : '-$') + Math.abs(c).toFixed(4);
+                    cashEl.className = 'big ' + (c >= 0 ? 'green' : 'red');
+                    document.getElementById('mm-fills-24h').textContent = (s.fills_24h || 0);
+                    document.getElementById('mm-fills-life').textContent =
+                        (s.total_fills_lifetime || 0) + ' lifetime  ·  avg ' +
+                        (s.avg_pnl_per_fill_cents || 0).toFixed(2) + '¢/fill';
+                    document.getElementById('mm-tokens').textContent =
+                        (s.n_tokens_tracked || 0) + ' / ' + (s.active_quotes_now || 0);
+                    document.getElementById('mm-drift-pulls').textContent = (s.drift_filter_pulls_24h || 0);
+                    document.getElementById('mm-decisions-24h').textContent =
+                        (s.decisions_24h || 0) + ' decisions';
+                    var top = d.top_tokens || [];
+                    var topDiv = document.getElementById('mm-top');
+                    if (!top.length) {
+                        topDiv.innerHTML = '<div class="dim">No fills yet — bot is observing</div>';
+                    } else {
+                        topDiv.innerHTML = top.map(function(t) {
+                            var color = t.cash >= 0 ? 'green' : 'red';
+                            return '<div style="display:inline-block;margin-right:14px;font-size:11px;">' +
+                                '<span class="dim">' + t.token_id.substr(0, 10) + '…</span>  ' +
+                                '<b>' + t.n_fills + '</b> fills · ' +
+                                'inv=' + t.inventory + ' · ' +
+                                '<span class="' + color + '">$' + t.cash.toFixed(4) + '</span>' +
+                                '</div>';
+                        }).join('');
+                    }
+                })
+                .catch(function(e) {});
+        }
+        pollMM();
+        setInterval(pollMM, 5000);
     </script>
 </body>
 </html>

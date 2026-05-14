@@ -47,6 +47,15 @@ from edge_analyst import EdgeAnalyst
 from match_analyzer import ContinuousMatchAnalyzer
 from match_recorder import MatchRecorder
 
+# Live market-making runner (shadow mode). Lazy-initialised on first book update
+# so import order can never affect bot startup.
+try:
+    from mm_live import get_runner as _get_mm_runner
+    _MM_AVAILABLE = True
+except Exception as _e:
+    logging.getLogger(__name__).warning(f"mm_live import failed; MM disabled: {_e}")
+    _MM_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -749,12 +758,29 @@ class EsportsBot:
                             ws_a.get("best_bid", 0), ws_a.get("best_ask", 0),
                             ms.team_a, ms.team_b,
                         )
+                        # Feed live MM runner (shadow mode)
+                        if _MM_AVAILABLE:
+                            try:
+                                _get_mm_runner().on_book(
+                                    market.token_id_a, event.match_id,
+                                    ws_a.get("best_bid", 0), ws_a.get("best_ask", 0),
+                                )
+                            except Exception as _mme:
+                                logger.debug(f"[MM] event-hook err: {_mme}")
                     if ws_b:
                         self.recorder.record_best_bid_ask(
                             event.match_id, market.token_id_b,
                             ws_b.get("best_bid", 0), ws_b.get("best_ask", 0),
                             ms.team_a, ms.team_b,
                         )
+                        if _MM_AVAILABLE:
+                            try:
+                                _get_mm_runner().on_book(
+                                    market.token_id_b, event.match_id,
+                                    ws_b.get("best_bid", 0), ws_b.get("best_ask", 0),
+                                )
+                            except Exception as _mme:
+                                logger.debug(f"[MM] event-hook err: {_mme}")
 
         # Capture ALL raw events for live feed display
         if event.event_type.value in _raw_types and event.game in ("cs2", "dota2"):
@@ -2245,12 +2271,28 @@ class EsportsBot:
                             ws_a.get("best_bid", 0), ws_a.get("best_ask", 0),
                             state.team_a, state.team_b,
                         )
+                        if _MM_AVAILABLE:
+                            try:
+                                _get_mm_runner().on_book(
+                                    market.token_id_a, match_id,
+                                    ws_a.get("best_bid", 0), ws_a.get("best_ask", 0),
+                                )
+                            except Exception as _mme:
+                                logger.debug(f"[MM] snapshot-hook err: {_mme}")
                         if ws_b and ws_b.get("best_bid", 0) > 0:
                             self.recorder.record_best_bid_ask(
                                 match_id, market.token_id_b,
                                 ws_b.get("best_bid", 0), ws_b.get("best_ask", 0),
                                 state.team_a, state.team_b,
                             )
+                            if _MM_AVAILABLE:
+                                try:
+                                    _get_mm_runner().on_book(
+                                        market.token_id_b, match_id,
+                                        ws_b.get("best_bid", 0), ws_b.get("best_ask", 0),
+                                    )
+                                except Exception as _mme:
+                                    logger.debug(f"[MM] snapshot-hook err: {_mme}")
                         # (thin game-state snapshot DISABLED — the bo3.gg raw-payload
                         # handler _on_raw_bo3_snapshot writes rich SNAPSHOT_MATCH_UPDATE
                         # lines on every provider tick. Writing a thin one here too
