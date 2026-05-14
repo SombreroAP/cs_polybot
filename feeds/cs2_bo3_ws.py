@@ -97,6 +97,15 @@ class CS2Bo3WebSocketFeed(GameFeed):
         if not payload:
             return
 
+        # bo3.gg's /matches WS topic carries EVERY discipline (CS2, Valorant,
+        # Dota2, ...). discipline_id == 1 is CS2; anything else is a different
+        # game we have no model/feed semantics for. Without this filter,
+        # Valorant matches (e.g. map "breeze") were being ingested and
+        # mislabelled game="cs2" — polluting the recorder + dashboard.
+        discipline_id = payload.get("discipline_id")
+        if discipline_id is not None and discipline_id != 1:
+            return
+
         match_id = payload.get("id")
         if not match_id:
             return
