@@ -2192,9 +2192,18 @@ class EsportsBot:
                             logger.info(f"[UNLINKED-MM] subscribed {len(new_toks)} more tokens (total {len(subscribed)})")
                         except Exception as _e:
                             logger.debug(f"[UNLINKED-MM] subscribe err: {_e}")
-                    # Feed MM from current WS prices
+                    # Feed MM from current WS prices.
+                    # Only feed books the strategy can actually TRADE: spread
+                    # must be wide enough to earn (>= ~8c, just under the
+                    # strategy's 10c min so transient tightening still tracks)
+                    # but not so wide it never fills (<= 25c, the strategy's
+                    # max_spread). Feeding untradeable books just burns the
+                    # worker. NOTE: the WS on_price_update callback also feeds
+                    # these tokens once subscribed; the strategy applies the
+                    # same [min,max]_spread gate, so this is just pre-filtering.
                     runner = _get_mm_runner()
                     fed = 0
+                    tradeable = 0
                     for m in cand:
                         for t in (m.token_id_a, m.token_id_b):
                             if not t or t in linked_toks:
@@ -2206,15 +2215,18 @@ class EsportsBot:
                             ask = p.get("best_ask", 0) or 0
                             if bid <= 0.01 or ask >= 0.99:
                                 continue
-                            if (ask - bid) > 0.10:  # >10¢ spread = illiquid
-                                continue
+                            spread = ask - bid
+                            if spread < 0.08 or spread > 0.25:
+                                continue  # outside the strategy's tradeable band
+                            tradeable += 1
                             try:
                                 runner.submit_book_update(t, m.market_id, bid, ask)
                                 fed += 1
                             except Exception:
                                 pass
                     if fed and int(_time.time()) % 30 < 3:  # log roughly every 30s
-                        logger.info(f"[UNLINKED-MM] fed {fed} books to MM runner ({len(cand)} mkts watched)")
+                        logger.info(f"[UNLINKED-MM] fed {fed} tradeable books "
+                                    f"({len(cand)} mkts watched, {tradeable} in spread band)")
                 except Exception as e:
                     logger.warning(f"[UNLINKED-MM] loop error: {e}")
                 elapsed = _time.time() - t0

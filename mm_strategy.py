@@ -1,19 +1,19 @@
 """
 Production-ready market-making strategy module.
 
-Encapsulates the strategy that emerged from overnight backtests:
-  - Quote BEHIND the inside by 2¢ on both sides
-  - Only quote when current spread ≥ 10¢
-  - No event cooldown (it hurt due to inventory carry)
-  - No inventory skewing (marginal effect)
-  - Max inventory per token: 5 units
-  - Cancel + re-quote on each book update
+Strategy:
+  - Quote INSIDE the touch by 1¢ on both sides — become the best bid/ask so
+    we actually get filled. (Original config quoted *behind* the touch, which
+    backtested well under a permissive fill model but never fills live.)
+  - Only quote when spread is in [10¢, 25¢] — narrower has no edge, wider
+    doesn't trade and leaves inventory stranded.
+  - Toxic-flow model pulls quotes when predicted next-60s drift > threshold.
+  - No inventory skewing beyond a tiny nudge; max inventory per token: 5 units.
+  - Cancel + re-quote on each meaningful book move.
 
-Honest expected economics (from 26-day backtest, 1287 fills, 575 tokens):
-  - Gross PnL: +0.19¢/fill   (~+$1.80 per 1000 fills at 1-share size)
-  - Break-even friction: ~0.18¢/share
-  - Polygon gas estimate: 0.01–0.05¢/share at typical quote size
-  - Net edge: ≈ +0.14¢/fill if real friction is 0.05¢
+Economics depend on fill rate × spread captured − adverse selection − friction.
+The live shadow run is the source of truth — backtest fill models proved
+unreliable, so trust the sim PnL accumulating in mm.db, not a priori numbers.
 
 Integration pattern:
     from mm_strategy_production import MMStrategy
@@ -33,8 +33,15 @@ from typing import Optional
 
 @dataclass
 class MMConfig:
-    quote_delta: float = -0.02         # quote BEHIND the inside by this many $
+    # POSITIVE = quote INSIDE the touch (improve best bid/ask), become the
+    # best price so we actually get filled. NEGATIVE = quote behind the touch
+    # (last in queue, almost never fills — that was the original bug: the
+    # backtest's fill model rewarded "behind", the live fill model does not).
+    quote_delta: float = 0.01          # improve best bid/ask by this many $
     min_spread: float = 0.10           # don't quote if spread is below this
+    max_spread: float = 0.25           # don't quote ultra-wide books — they
+                                       # don't trade, the "edge" is illusory,
+                                       # and inventory would sit unhedged
     max_inv: float = 5.0               # max absolute inventory in units
     quote_size: float = 1.0            # units per quote (config for live size)
     inventory_skew: float = 0.001      # tiny skew helps marginally
@@ -145,12 +152,21 @@ class MMStrategy:
                 return {"action": "cancel_all", "reason": toxic_reason}
             return None
 
-        # Don't quote if spread too narrow
+        # Don't quote if spread too narrow (no room to make money)
         if spread < self.cfg.min_spread:
             if self.current_bid_quote is not None or self.current_ask_quote is not None:
                 self.current_bid_quote = None
                 self.current_ask_quote = None
                 return {"action": "cancel_all", "reason": "spread_too_narrow"}
+            return None
+
+        # Don't quote if spread too wide — these books don't trade, so we'd
+        # never fill the other side and would carry naked inventory.
+        if spread > self.cfg.max_spread:
+            if self.current_bid_quote is not None or self.current_ask_quote is not None:
+                self.current_bid_quote = None
+                self.current_ask_quote = None
+                return {"action": "cancel_all", "reason": "spread_too_wide"}
             return None
 
         # Compute desired quotes
@@ -234,13 +250,17 @@ if __name__ == "__main__":
     s = MMStrategy(token_id="test")
     d = s.on_book_update(0.40, 0.55)
     assert d and d["action"] == "cancel_and_replace"
-    assert d["new_bid_price"] == 0.38  # 0.40 + (-0.02)
-    assert d["new_ask_price"] == 0.57  # 0.55 - (-0.02)
+    assert d["new_bid_price"] == 0.41, d  # 0.40 + 0.01 — INSIDE the touch
+    assert d["new_ask_price"] == 0.54, d  # 0.55 - 0.01 — INSIDE the touch
     print(f"Initial quote: {d}")
-    s.on_fill("bid", 0.38)
+    s.on_fill("bid", 0.41)
     print(f"After bid fill: inv={s.inventory}, cash={s.cash}")
-    s.on_fill("ask", 0.57)
+    s.on_fill("ask", 0.54)
     print(f"After ask fill: inv={s.inventory}, cash={s.cash}")
-    print(f"Round-trip PnL: ${s.cash:+.4f}  (expected ~+0.19$)")
+    print(f"Round-trip PnL: ${s.cash:+.4f}  (capture = spread - 2*quote_delta)")
+    assert abs(s.cash - 0.13) < 1e-9, s.cash  # 0.54 - 0.41
+    # too-wide book should be skipped
+    s2 = MMStrategy(token_id="wide")
+    assert s2.on_book_update(0.20, 0.60) is None, "should skip 40c spread"
     print(f"Stats: {s.stats()}")
     print("Smoke test passed.")
