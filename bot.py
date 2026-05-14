@@ -1987,6 +1987,26 @@ class EsportsBot:
         await self.polymarket_ws.connect()
         asyncio.create_task(self._ws_subscription_loop())
 
+        # Wire MM (shadow mode) into every price-update event. This is the
+        # high-frequency path — the per-event hooks elsewhere fire only on
+        # MATCH_END and the snapshot loop polls only every 5s.
+        if _MM_AVAILABLE:
+            def _mm_on_price(token_id, best_bid, best_ask):
+                try:
+                    # Match-id lookup: scan linked markets for this token
+                    match_id = None
+                    try:
+                        for mid, mkt in self.latency_analyzer._match_to_market.items():
+                            if mkt.token_id_a == token_id or mkt.token_id_b == token_id:
+                                match_id = mid; break
+                    except Exception:
+                        match_id = None
+                    _get_mm_runner().on_book(token_id, match_id, best_bid, best_ask)
+                except Exception as _e:
+                    pass  # never break the WS path on MM error
+            self.polymarket_ws.on_price_update(_mm_on_price)
+            logger.info("[MM] hooked into polymarket_ws.on_price_update (real-time)")
+
         # Start CS2 match discovery loop
         discovery_task = asyncio.create_task(self._match_discovery_loop())
 
