@@ -103,8 +103,22 @@ class LiveMMRunner:
         # Background worker for non-blocking submits.
         # Bounded queue so a flood from a hot loop can never accumulate RAM.
         # When full, oldest items are dropped (most recent book is fresher).
-        self._queue: _queue_mod.Queue = _queue_mod.Queue(maxsize=5000)
+        self._queue: _queue_mod.Queue = _queue_mod.Queue(maxsize=20000)
         self._dropped = 0
+        # Producer-side dedup: skip a submit if (bid, ask) is byte-identical to
+        # the last one we enqueued for that token. An unchanged book carries no
+        # new information for the strategy — this collapses the bulk of the
+        # flood (REST poller + WS callback + unlinked feeder all re-report the
+        # same book) before it ever touches the queue.
+        self._last_submitted: Dict[str, tuple] = {}
+        # Persistent connection owned by the worker thread (set in _run_worker).
+        # All on_book writes happen on that one thread, so a single long-lived
+        # connection replaces the open-connection-per-write hot path that was
+        # the real bottleneck (3 PRAGMA round-trips * thousands of writes/sec).
+        self._worker_conn: Optional[sqlite3.Connection] = None
+        # Throttle state persistence — it's an overwritable checkpoint, no need
+        # to write it on every single book tick. {token_id: last_persist_ts}
+        self._last_state_persist: Dict[str, float] = {}
         self._stop_worker = threading.Event()
         self._worker = threading.Thread(target=self._run_worker, daemon=True,
                                          name="mm-worker")
@@ -116,6 +130,15 @@ class LiveMMRunner:
 
     # ────── Worker (drains the queue, never blocks producers) ────────────
     def _run_worker(self):
+        # Open the worker's long-lived connection once. Every on_book write
+        # reuses it instead of opening a fresh connection (with 3 PRAGMAs)
+        # per statement — that per-write open was throttling the worker to
+        # well under the producer rate, causing the millions of drops.
+        try:
+            self._worker_conn = self._connect()
+        except Exception as e:
+            log.warning(f"[MM-WORKER] could not open persistent conn: {e}")
+            self._worker_conn = None
         while not self._stop_worker.is_set():
             try:
                 item = self._queue.get(timeout=1.0)
@@ -135,8 +158,18 @@ class LiveMMRunner:
     def submit_book_update(self, token_id: str, match_id: Optional[str],
                           bid: float, ask: float, ts: Optional[float] = None):
         """Non-blocking enqueue. Drops oldest if queue is full so producers
-        (price_updater, WS callback) can never be backpressured."""
+        (price_updater, WS callback) can never be backpressured.
+
+        Coalesces at the source: an unchanged (bid, ask) for a token is
+        dropped before it hits the queue — multiple producers re-reporting
+        the same book is the dominant source of load and carries no signal.
+        """
         import queue as _queue_mod
+        if token_id:
+            prev = self._last_submitted.get(token_id)
+            if prev is not None and prev[0] == bid and prev[1] == ask:
+                return  # identical book — nothing changed, skip
+            self._last_submitted[token_id] = (bid, ask)
         try:
             self._queue.put_nowait((token_id, match_id, bid, ask, ts or time.time()))
         except _queue_mod.Full:
@@ -149,12 +182,22 @@ class LiveMMRunner:
                 pass
 
     def _execute_with_retry(self, sql: str, params: tuple = (), max_attempts: int = 5):
-        """Execute a single statement with backoff on busy/locked DB."""
+        """Execute a single statement with backoff on busy/locked DB.
+
+        Uses the worker thread's persistent connection (this is only ever
+        called from on_book, which runs exclusively on the worker). Falls
+        back to a one-off connection if the persistent one isn't up yet.
+        """
         last_err = None
         for attempt in range(max_attempts):
             try:
-                with self._connect() as c:
-                    c.execute(sql, params)
+                conn = self._worker_conn
+                if conn is not None:
+                    conn.execute(sql, params)
+                    conn.commit()
+                else:
+                    with self._connect() as c:
+                        c.execute(sql, params)
                 return
             except sqlite3.OperationalError as e:
                 last_err = e
@@ -262,6 +305,7 @@ class LiveMMRunner:
             token_id, MMStrategy(token_id=token_id, cfg=self.cfg)
         )
 
+        fill_happened = False
         if last_q and prev_bid is not None and prev_ask is not None:
             our_bid = last_q.get("bid_price")
             our_ask = last_q.get("ask_price")
@@ -271,12 +315,14 @@ class LiveMMRunner:
                 self._log_fill(ts, token_id, match_id, "bid_fill",
                                our_bid, strat.inventory, strat.cash)
                 last_q["bid_price"] = None  # consumed
+                fill_happened = True
             # Ask fills when the NEW best_bid rises to or above our ask
             if our_ask is not None and bid >= our_ask - 1e-9:
                 strat.on_fill("ask", our_ask, size=self.cfg.quote_size, ts=ts)
                 self._log_fill(ts, token_id, match_id, "ask_fill",
                                our_ask, strat.inventory, strat.cash)
                 last_q["ask_price"] = None
+                fill_happened = True
 
         # 2. Get strategy's decision for the new book
         decision = strat.on_book_update(bid, ask, ts=ts)
@@ -314,9 +360,17 @@ class LiveMMRunner:
                 except Exception as e:
                     log.debug(f"[MM] live-trader cancel err: {e}")
 
-        # 5. Update last book + persist state
+        # 5. Update last book + persist state.
+        # State is an overwritable checkpoint — throttle to once / 5s per token
+        # so the hot path isn't doing a DB write on every single book tick.
+        # A fill always forces an immediate persist (see below) so PnL-relevant
+        # state is never more than one tick stale.
         self._last_book[token_id] = {"bid": bid, "ask": ask, "ts": ts}
-        self._persist_state(strat)
+        now = time.time()
+        last_persist = self._last_state_persist.get(token_id, 0.0)
+        if now - last_persist > 5.0 or fill_happened:
+            self._persist_state(strat)
+            self._last_state_persist[token_id] = now
 
     # ────── DB writers ──────────────────────────────────────────────────
     def _log_decision(self, ts, token_id, match_id, decision,
