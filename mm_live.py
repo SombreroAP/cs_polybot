@@ -103,14 +103,29 @@ class LiveMMRunner:
             f"db={self.db_path}  cfg={self.cfg}"
         )
 
+    def _connect(self):
+        """Open a SQLite connection with WAL mode + lock timeout.
+        Critical: trades.db is shared with the bot's other writers, so we MUST
+        use WAL (allows concurrent readers + a single writer without blocking)
+        and a generous timeout for lock acquisition.
+        """
+        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")  # fast + safe for our writes
+            conn.execute("PRAGMA busy_timeout=30000")
+        except Exception:
+            pass
+        return conn
+
     def _init_db(self):
-        with sqlite3.connect(str(self.db_path)) as c:
+        with self._connect() as c:
             c.executescript(_SCHEMA)
 
     def _load_state(self):
         """Resume in-memory strategy state from mm_state."""
         try:
-            with sqlite3.connect(str(self.db_path)) as c:
+            with self._connect() as c:
                 rows = c.execute("SELECT * FROM mm_state").fetchall()
             for row in rows:
                 tok, last_ts, inv, cash, nf, nb, na = row
@@ -198,7 +213,7 @@ class LiveMMRunner:
     def _log_decision(self, ts, token_id, match_id, decision,
                       book_bid, book_ask, drift):
         try:
-            with sqlite3.connect(str(self.db_path)) as c:
+            with self._connect() as c:
                 c.execute(
                     "INSERT INTO mm_decisions "
                     "(ts, token_id, match_id, action, bid_price, ask_price, "
@@ -213,7 +228,7 @@ class LiveMMRunner:
 
     def _log_fill(self, ts, token_id, match_id, side, price, inv_after, cash_after):
         try:
-            with sqlite3.connect(str(self.db_path)) as c:
+            with self._connect() as c:
                 c.execute(
                     "INSERT INTO mm_fills "
                     "(ts, token_id, match_id, side, price, sim_inv_after, sim_cash_after) "
@@ -229,7 +244,7 @@ class LiveMMRunner:
 
     def _persist_state(self, strat: MMStrategy):
         try:
-            with sqlite3.connect(str(self.db_path)) as c:
+            with self._connect() as c:
                 c.execute(
                     "INSERT OR REPLACE INTO mm_state "
                     "(token_id, last_update_ts, inventory, cash, n_fills, "
@@ -256,7 +271,7 @@ class LiveMMRunner:
         # Pull recent decisions count + drift-filter activations from DB
         try:
             cutoff = time.time() - 24 * 3600
-            with sqlite3.connect(str(self.db_path)) as c:
+            with self._connect() as c:
                 row = c.execute(
                     "SELECT COUNT(*), "
                     "SUM(CASE WHEN reason='drift_filter' THEN 1 ELSE 0 END) "
