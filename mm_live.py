@@ -174,16 +174,29 @@ class LiveMMRunner:
             log.warning(f"[MM] state load failed (will start fresh): {e}")
 
     # ────── Public entry point ───────────────────────────────────────────
+    _diag_total = 0
+    _diag_skipped = 0
+
     def on_book(self, token_id: str, match_id: Optional[str],
                 bid: float, ask: float, ts: Optional[float] = None):
         """Called by the bot on every observed book change for a token."""
+        LiveMMRunner._diag_total += 1
+        # Heartbeat every 100 calls so we can confirm hook is firing in logs
+        if LiveMMRunner._diag_total % 100 == 1:
+            log.info(f"[MM] on_book heartbeat: total={LiveMMRunner._diag_total} "
+                     f"skipped={LiveMMRunner._diag_skipped} "
+                     f"tokens_tracked={len(self._strategies)}")
+
         if not token_id or bid is None or ask is None:
+            LiveMMRunner._diag_skipped += 1
             return
         try:
             bid = float(bid); ask = float(ask)
         except Exception:
+            LiveMMRunner._diag_skipped += 1
             return
         if bid <= 0 or ask <= 0 or ask <= bid or bid >= 1 or ask >= 1:
+            LiveMMRunner._diag_skipped += 1
             return  # malformed or stale book
         ts = ts or time.time()
 
