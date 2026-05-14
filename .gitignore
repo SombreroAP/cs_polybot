@@ -90,3 +90,5 @@ data/evals/
 catboost_info/
 .gbm_env/
 data/mm.db
+data/mm.db-shm
+data/mm.db-wal
