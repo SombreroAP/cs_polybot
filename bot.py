@@ -2145,6 +2145,83 @@ class EsportsBot:
 
         threading.Thread(target=_run_rest_poller, daemon=True).start()
 
+        # ─── Unlinked-market MM feeder ───────────────────────────────────────
+        # MM strategy is feed-agnostic (predicts drift from price history, not
+        # game state). The HLTV-linkage requirement was blocking us on Dota2,
+        # LoL, Valorant markets where Polymarket has live betting but we have
+        # no game feed. This thread directly subscribes to top-liquidity esports
+        # tokens on Polymarket and feeds the MM runner. Lets the bot be active
+        # 24/7 regardless of whether HLTV matches map to PM markets.
+        def _run_unlinked_mm_feeder():
+            import time as _time
+            import asyncio as _asyncio
+            if not _MM_AVAILABLE:
+                return
+            _time.sleep(20)
+            logger.info("[UNLINKED-MM] direct PM feeder starting (no HLTV gate)")
+            subscribed: set = set()
+            while self._running:
+                t0 = _time.time()
+                try:
+                    mkts = self.market_finder.fetch_esports_markets()  # cached 30s
+                    # Exclude tokens already linked to HLTV matches (those get the
+                    # primary linked-path feed; we don't want double-quoting).
+                    linked_toks: set = set()
+                    for m in self.latency_analyzer._match_to_market.values():
+                        if getattr(m, "token_id_a", None): linked_toks.add(m.token_id_a)
+                        if getattr(m, "token_id_b", None): linked_toks.add(m.token_id_b)
+                    # Sort by liquidity, take liquid ones only
+                    cand = sorted(
+                        [m for m in mkts if (m.liquidity or 0) > 500],
+                        key=lambda m: m.liquidity or 0, reverse=True
+                    )[:30]
+                    # Subscribe new tokens to WS so we get realtime books
+                    new_toks: list = []
+                    for m in cand:
+                        for t in (m.token_id_a, m.token_id_b):
+                            if t and t not in subscribed and t not in linked_toks:
+                                new_toks.append(t)
+                                subscribed.add(t)
+                    if new_toks and self.polymarket_ws and hasattr(self, "_async_loop"):
+                        try:
+                            fut = _asyncio.run_coroutine_threadsafe(
+                                self.polymarket_ws.subscribe(new_toks),
+                                self._async_loop,
+                            )
+                            fut.result(timeout=5)
+                            logger.info(f"[UNLINKED-MM] subscribed {len(new_toks)} more tokens (total {len(subscribed)})")
+                        except Exception as _e:
+                            logger.debug(f"[UNLINKED-MM] subscribe err: {_e}")
+                    # Feed MM from current WS prices
+                    runner = _get_mm_runner()
+                    fed = 0
+                    for m in cand:
+                        for t in (m.token_id_a, m.token_id_b):
+                            if not t or t in linked_toks:
+                                continue
+                            p = self.polymarket_ws.get_price(t)
+                            if not p:
+                                continue
+                            bid = p.get("best_bid", 0) or 0
+                            ask = p.get("best_ask", 0) or 0
+                            if bid <= 0.01 or ask >= 0.99:
+                                continue
+                            if (ask - bid) > 0.10:  # >10¢ spread = illiquid
+                                continue
+                            try:
+                                runner.submit_book_update(t, m.market_id, bid, ask)
+                                fed += 1
+                            except Exception:
+                                pass
+                    if fed and int(_time.time()) % 30 < 3:  # log roughly every 30s
+                        logger.info(f"[UNLINKED-MM] fed {fed} books to MM runner ({len(cand)} mkts watched)")
+                except Exception as e:
+                    logger.warning(f"[UNLINKED-MM] loop error: {e}")
+                elapsed = _time.time() - t0
+                _time.sleep(max(1.0, 3.0 - elapsed))
+
+        threading.Thread(target=_run_unlinked_mm_feeder, daemon=True).start()
+
         # Monitor heartbeat + watchdog — if position monitor hangs (past bug: DB lock
         # in sell_position wedges the whole thread, leaving positions stuck 20+ min
         # past their stop-loss), this watchdog kills the process so the wrapper restarts.
