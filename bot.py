@@ -1990,8 +1990,18 @@ class EsportsBot:
         # Wire MM (shadow mode) into every price-update event. This is the
         # high-frequency path — the per-event hooks elsewhere fire only on
         # MATCH_END and the snapshot loop polls only every 5s.
+        #
+        # The MM model is currently trained ONLY on CS2 data — applying it to
+        # Dota2/LoL/Valorant produces miscalibrated quotes and adverse fills
+        # (confirmed empirically: 30 LoL fills net negative). So we gate the
+        # MM hook on self._mm_eligible_tokens, populated only with CS2 token
+        # IDs by the unlinked-MM feeder. Tokens subscribed for *recording*
+        # purposes (other games) flow through this callback but are skipped.
+        self._mm_eligible_tokens: set = set()
         if _MM_AVAILABLE:
             def _mm_on_price(token_id, best_bid, best_ask):
+                if token_id not in self._mm_eligible_tokens:
+                    return  # non-CS2 (recording-only) or unknown token — don't quote
                 try:
                     # Match-id lookup: scan linked markets for this token
                     match_id = None
@@ -2005,7 +2015,7 @@ class EsportsBot:
                 except Exception as _e:
                     pass  # never break the WS path on MM error
             self.polymarket_ws.on_price_update(_mm_on_price)
-            logger.info("[MM] hooked into polymarket_ws.on_price_update (real-time)")
+            logger.info("[MM] hooked into polymarket_ws.on_price_update (CS2-only gate)")
 
         # Start CS2 match discovery loop
         discovery_task = asyncio.create_task(self._match_discovery_loop())
@@ -2158,7 +2168,8 @@ class EsportsBot:
             if not _MM_AVAILABLE:
                 return
             _time.sleep(20)
-            logger.info("[UNLINKED-MM] direct PM feeder starting (no HLTV gate)")
+            logger.info("[UNLINKED-MM] direct PM feeder starting (CS2-only; "
+                        "other games subscribed by the recording-only thread)")
             subscribed: set = set()
             while self._running:
                 t0 = _time.time()
@@ -2170,18 +2181,26 @@ class EsportsBot:
                     for m in self.latency_analyzer._match_to_market.values():
                         if getattr(m, "token_id_a", None): linked_toks.add(m.token_id_a)
                         if getattr(m, "token_id_b", None): linked_toks.add(m.token_id_b)
-                    # Sort by liquidity, take liquid ones only
+                    # Linked tokens come via HLTV which is CS2-only, so they're
+                    # always MM-eligible — keep the WS hook firing for them.
+                    self._mm_eligible_tokens.update(linked_toks)
+                    # CS2 ONLY: toxic-flow model was trained on CS2 data; applying
+                    # it to Dota2/LoL/Valorant produces miscalibrated adverse
+                    # fills. Until we have per-game models, MM only quotes CS2.
                     cand = sorted(
-                        [m for m in mkts if (m.liquidity or 0) > 500],
+                        [m for m in mkts if m.game == "cs2" and (m.liquidity or 0) > 500],
                         key=lambda m: m.liquidity or 0, reverse=True
                     )[:30]
-                    # Subscribe new tokens to WS so we get realtime books
+                    # Subscribe new tokens to WS so we get realtime books.
+                    # Also mark them MM-eligible (CS2 by definition here).
                     new_toks: list = []
                     for m in cand:
                         for t in (m.token_id_a, m.token_id_b):
                             if t and t not in subscribed and t not in linked_toks:
                                 new_toks.append(t)
                                 subscribed.add(t)
+                            if t:
+                                self._mm_eligible_tokens.add(t)
                     if new_toks and self.polymarket_ws and hasattr(self, "_async_loop"):
                         try:
                             fut = _asyncio.run_coroutine_threadsafe(
@@ -2236,6 +2255,89 @@ class EsportsBot:
                 _time.sleep(max(1.0, 3.0 - elapsed))
 
         threading.Thread(target=_run_unlinked_mm_feeder, daemon=True).start()
+
+        # ─── Recording-only subscriber (Dota2 / LoL / Valorant) ──────────────
+        # We want orderbook data for the other esports games so we can train
+        # per-game toxic-flow models later. This thread subscribes top-liquid
+        # tokens on those games to the Polymarket WS, but does NOT mark them
+        # MM-eligible — so book updates flow into the recorder (via the
+        # snapshot-recorder loop reading polymarket_ws.get_price) without ever
+        # triggering MM quoting on a model that wasn't trained on that game.
+        def _run_recording_subscriber():
+            import time as _time
+            import asyncio as _asyncio
+            _time.sleep(25)
+            logger.info("[REC-SUB] recording-only WS subscriber starting "
+                        "(dota2/lol/valorant — books recorded, NOT quoted)")
+            subscribed: set = set()
+            tok_to_market: dict = {}  # token_id -> (market_id, team_a, team_b, game)
+            REC_GAMES = {"dota2", "lol", "valorant"}
+            last_book: dict = {}  # token_id -> (bid, ask) for dedup
+            while self._running:
+                t0 = _time.time()
+                try:
+                    mkts = self.market_finder.fetch_esports_markets()
+                    cand = sorted(
+                        [m for m in mkts
+                         if m.game in REC_GAMES and (m.liquidity or 0) > 1000],
+                        key=lambda m: m.liquidity or 0, reverse=True
+                    )[:40]
+                    new_toks: list = []
+                    for m in cand:
+                        for t in (m.token_id_a, m.token_id_b):
+                            if not t:
+                                continue
+                            tok_to_market[t] = (m.market_id, m.team_a or "",
+                                                m.team_b or "", m.game)
+                            if t not in subscribed:
+                                new_toks.append(t)
+                                subscribed.add(t)
+                                # Explicitly do NOT add to _mm_eligible_tokens.
+                    if new_toks and self.polymarket_ws and hasattr(self, "_async_loop"):
+                        try:
+                            fut = _asyncio.run_coroutine_threadsafe(
+                                self.polymarket_ws.subscribe(new_toks),
+                                self._async_loop,
+                            )
+                            fut.result(timeout=5)
+                            logger.info(f"[REC-SUB] subscribed {len(new_toks)} "
+                                        f"non-CS2 tokens for recording (total {len(subscribed)})")
+                        except Exception as _e:
+                            logger.debug(f"[REC-SUB] subscribe err: {_e}")
+                    # Persist book snapshots — dedup on identical (bid,ask) so
+                    # we only write when the book actually moves. Keyed by the
+                    # Polymarket market_id (no HLTV match id for these games yet).
+                    recorded = 0
+                    for tok, (mid, ta, tb, game) in tok_to_market.items():
+                        p = self.polymarket_ws.get_price(tok)
+                        if not p:
+                            continue
+                        bid = p.get("best_bid", 0) or 0
+                        ask = p.get("best_ask", 0) or 0
+                        if bid <= 0 or ask <= 0 or ask <= bid:
+                            continue
+                        prev = last_book.get(tok)
+                        if prev is not None and prev == (bid, ask):
+                            continue
+                        last_book[tok] = (bid, ask)
+                        try:
+                            self.recorder.record_best_bid_ask(
+                                f"pm_{mid}", tok, bid, ask, ta, tb,
+                            )
+                            recorded += 1
+                        except Exception:
+                            pass
+                    if recorded and int(_time.time()) % 60 < 5:
+                        logger.info(f"[REC-SUB] recorded {recorded} non-CS2 book snapshots "
+                                    f"(tracking {len(tok_to_market)} tokens)")
+                except Exception as e:
+                    logger.warning(f"[REC-SUB] loop error: {e}")
+                elapsed = _time.time() - t0
+                # 5s cadence — fast enough to capture book movement, slow enough
+                # not to flood the recorder file IO.
+                _time.sleep(max(1.0, 5.0 - elapsed))
+
+        threading.Thread(target=_run_recording_subscriber, daemon=True).start()
 
         # Monitor heartbeat + watchdog — if position monitor hangs (past bug: DB lock
         # in sell_position wedges the whole thread, leaving positions stuck 20+ min
