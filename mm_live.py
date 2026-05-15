@@ -119,6 +119,10 @@ class LiveMMRunner:
         # Throttle state persistence — it's an overwritable checkpoint, no need
         # to write it on every single book tick. {token_id: last_persist_ts}
         self._last_state_persist: Dict[str, float] = {}
+        # Game label per token (set by bot.py feeders so the strategy can pick
+        # the per-game toxic-flow model). Default "cs2" for any unregistered
+        # token to preserve back-compat with the CS2-trained model.
+        self._token_game: Dict[str, str] = {}
         self._stop_worker = threading.Event()
         self._worker = threading.Thread(target=self._run_worker, daemon=True,
                                          name="mm-worker")
@@ -154,6 +158,16 @@ class LiveMMRunner:
                 log.debug(f"[MM-WORKER] error processing: {e}")
             finally:
                 self._queue.task_done()
+
+    def register_token_game(self, token_id: str, game: str) -> None:
+        """Tag a token with its game so the strategy picks the right model.
+
+        Idempotent: re-calling with the same (token,game) is a no-op. Called
+        by bot.py feeders when they discover a market. Default for an
+        unregistered token is "cs2" (back-compat).
+        """
+        if token_id and game:
+            self._token_game[token_id] = game
 
     def submit_book_update(self, token_id: str, match_id: Optional[str],
                           bid: float, ask: float, ts: Optional[float] = None):
@@ -301,9 +315,11 @@ class LiveMMRunner:
         prev_bid = last_book.get("bid")
         prev_ask = last_book.get("ask")
 
-        strat = self._strategies.setdefault(
-            token_id, MMStrategy(token_id=token_id, cfg=self.cfg)
-        )
+        strat = self._strategies.get(token_id)
+        if strat is None:
+            game = self._token_game.get(token_id, "cs2")
+            strat = MMStrategy(token_id=token_id, cfg=self.cfg, game=game)
+            self._strategies[token_id] = strat
 
         fill_happened = False
         if last_q and prev_bid is not None and prev_ask is not None:

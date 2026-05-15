@@ -88,17 +88,21 @@ class _ModelHandle:
             return None
 
 
-# Singleton accessor
-_singleton: Optional[_ModelHandle] = None
-_singleton_lock = threading.Lock()
+# Per-path cache. Each game has its own trained model (toxic_flow_cs2_cb.pkl,
+# toxic_flow_lol_cb.pkl, ...), and the strategy picks the right one based on
+# the token's game. Caching by path lets multiple models live in memory
+# concurrently without thrashing.
+_handles: dict[str, _ModelHandle] = {}
+_handles_lock = threading.Lock()
 
 
 def get_predictor(model_path: str) -> _ModelHandle:
-    global _singleton
-    with _singleton_lock:
-        if _singleton is None or _singleton.path != model_path:
-            _singleton = _ModelHandle(model_path)
-    return _singleton
+    with _handles_lock:
+        h = _handles.get(model_path)
+        if h is None:
+            h = _ModelHandle(model_path)
+            _handles[model_path] = h
+        return h
 
 
 # ────────────────────────────────────────────────────────────────────────

@@ -2184,16 +2184,21 @@ class EsportsBot:
                     # Linked tokens come via HLTV which is CS2-only, so they're
                     # always MM-eligible — keep the WS hook firing for them.
                     self._mm_eligible_tokens.update(linked_toks)
-                    # CS2 ONLY: toxic-flow model was trained on CS2 data; applying
-                    # it to Dota2/LoL/Valorant produces miscalibrated adverse
-                    # fills. Until we have per-game models, MM only quotes CS2.
+                    # Games we have trained toxic-flow models for. Keep this
+                    # synced with mm_strategy.MMConfig.game_model_paths and the
+                    # files in models/. Quoting on a game without a model risks
+                    # adverse selection (we saw this empirically on LoL before
+                    # a model existed).
+                    MM_GAMES = {"cs2", "lol"}
                     cand = sorted(
-                        [m for m in mkts if m.game == "cs2" and (m.liquidity or 0) > 500],
+                        [m for m in mkts if m.game in MM_GAMES and (m.liquidity or 0) > 500],
                         key=lambda m: m.liquidity or 0, reverse=True
                     )[:30]
                     # Subscribe new tokens to WS so we get realtime books.
-                    # Also mark them MM-eligible (CS2 by definition here).
+                    # Mark eligible + register the game so the strategy picks
+                    # the per-game model.
                     new_toks: list = []
+                    runner = _get_mm_runner() if _MM_AVAILABLE else None
                     for m in cand:
                         for t in (m.token_id_a, m.token_id_b):
                             if t and t not in subscribed and t not in linked_toks:
@@ -2201,6 +2206,8 @@ class EsportsBot:
                                 subscribed.add(t)
                             if t:
                                 self._mm_eligible_tokens.add(t)
+                                if runner is not None:
+                                    runner.register_token_game(t, m.game)
                     if new_toks and self.polymarket_ws and hasattr(self, "_async_loop"):
                         try:
                             fut = _asyncio.run_coroutine_threadsafe(
@@ -2271,7 +2278,10 @@ class EsportsBot:
                         "(dota2/lol/valorant — books recorded, NOT quoted)")
             subscribed: set = set()
             tok_to_market: dict = {}  # token_id -> (market_id, team_a, team_b, game)
-            REC_GAMES = {"dota2", "lol", "valorant"}
+            # LoL graduated out of recording-only — it now has a trained model
+            # and is handled by the MM feeder. We keep recording dota2/valorant
+            # so we can train models for those next.
+            REC_GAMES = {"dota2", "valorant"}
             last_book: dict = {}  # token_id -> (bid, ask) for dedup
             while self._running:
                 t0 = _time.time()

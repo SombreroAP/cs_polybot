@@ -66,7 +66,14 @@ class MMConfig:
     # (+4.17¢/fill improvement). Fallback to "relative" if model file missing.
     # v2 CatBoost: +4.36¢/fill @ τ=1.5¢ (best in head-to-head, 2026-05-14)
     # Falls back to xgb (v1, +3.31¢/fill) if v2 not loadable.
-    model_path: str = "models/toxic_flow_v2_cb.pkl"
+    model_path: str = "models/toxic_flow_v2_cb.pkl"  # CS2 default
+    # Per-game model paths — the strategy resolves the right path based on
+    # its own .game field. Falls back to model_path (CS2) if the game isn't
+    # in the map. Only games with a trained model should be MM-eligible.
+    game_model_paths: dict = field(default_factory=lambda: {
+        "cs2": "models/toxic_flow_v2_cb.pkl",
+        "lol": "models/toxic_flow_lol_cb.pkl",
+    })
     model_threshold_cents: float = 1.5
 
 
@@ -74,6 +81,9 @@ class MMConfig:
 class MMStrategy:
     token_id: str
     cfg: MMConfig = field(default_factory=MMConfig)
+    # Game label — used to select the right toxic-flow model. Defaults to
+    # "cs2" so existing call sites that don't pass game keep working.
+    game: str = "cs2"
     inventory: float = 0.0
     cash: float = 0.0
     current_bid_quote: Optional[float] = None
@@ -123,7 +133,9 @@ class MMStrategy:
             try:
                 from mm_toxic_predictor import get_predictor, extract_features
                 feats = extract_features(self._mid_history, best_bid, best_ask, ts)
-                pred = get_predictor(self.cfg.model_path).predict_drift(feats)
+                # Pick the per-game model; fall back to default CS2 path.
+                model_path = self.cfg.game_model_paths.get(self.game, self.cfg.model_path)
+                pred = get_predictor(model_path).predict_drift(feats)
                 if pred is not None:
                     if pred * 100 > self.cfg.model_threshold_cents:
                         toxic = True
