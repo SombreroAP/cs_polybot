@@ -92,3 +92,7 @@ catboost_info/
 data/mm.db
 data/mm.db-shm
 data/mm.db-wal
+data/mm.db.bak.*
+# Trained per-game models — large pickle files, generated from scripts.
+# Keep them out of git; regenerate via /tmp/train_per_game_models.py.
+models/toxic_flow_*_cb.pkl
