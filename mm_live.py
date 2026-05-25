@@ -184,6 +184,13 @@ class LiveMMRunner:
             log.debug(f"[MM] settle sweep error: {e}")
 
     def _settle_stale_positions_locked(self, now: float):
+        """Realise ONLY positions that were clearly resolving when the feed
+        stopped (last book pinned near 0 or 1). Those settle at the true 0/1
+        outcome — high confidence. Positions that went stale at a mid-range
+        price (a dropped feed, not a resolution) are LEFT OPEN and reported as
+        unrealised — we do not fabricate a settlement value for them, because
+        guessing would be exactly the 'false data' that skews go-live planning.
+        """
         settled = 0
         for token_id, strat in list(self._strategies.items()):
             inv = getattr(strat, "inventory", 0.0) or 0.0
@@ -195,21 +202,23 @@ class LiveMMRunner:
             if now - book["ts"] < self.SETTLE_STALE_S:
                 continue  # still fresh — leave the open position alone
             mid = (book.get("bid", 0) + book.get("ask", 0)) / 2.0
-            if mid <= 0:
-                continue
+            # Only settle if the book had clearly moved to a resolution state.
+            if 0.05 < mid < 0.95:
+                continue  # ambiguous stale feed → keep open, mark unrealised
+            settle_price = 1.0 if mid >= 0.95 else 0.0
             units = int(round(abs(inv)))
             side = "ask" if inv > 0 else "bid"  # long→sell, short→buy to flatten
             for _ in range(units):
-                strat.on_fill(side, mid, size=self.cfg.quote_size, ts=now)
-                self._log_fill(now, token_id, None, side + "_fill", mid,
+                strat.on_fill(side, settle_price, size=self.cfg.quote_size, ts=now)
+                self._log_fill(now, token_id, None, side + "_fill", settle_price,
                                strat.inventory, strat.cash)
-            strat.inventory = 0.0  # clear any fractional remainder
+            strat.inventory = 0.0
             self._last_quote[token_id] = {"bid_price": None, "ask_price": None, "ts": now}
             self._persist_state(strat)
             settled += 1
         if settled:
-            log.info(f"[MM] settled {settled} stale positions at last mid "
-                     f"(>{self.SETTLE_STALE_S/60:.0f}min idle)")
+            log.info(f"[MM] settled {settled} resolved positions at 0/1 "
+                     f"(book pinned, >{self.SETTLE_STALE_S/60:.0f}min idle)")
 
     def register_token_game(self, token_id: str, game: str) -> None:
         """Tag a token with its game so the strategy picks the right model.

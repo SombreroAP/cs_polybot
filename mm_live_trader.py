@@ -93,6 +93,9 @@ class LiveTrader:
     _inv_usd: dict = field(default_factory=dict)
     # Hard kill switch (set when daily loss exceeded)
     _killed: bool = False
+    # Real-fill tracking: trade-ids already recorded (so polling is idempotent)
+    _seen_trade_ids: set = field(default_factory=set)
+    _real_fills_db: str = ""
 
     def __post_init__(self):
         if not self.enabled:
@@ -101,12 +104,76 @@ class LiveTrader:
             return
         try:
             self._init_client()
+            self._init_real_fills_db()
             _tg(f"🟢 MM live-trader activated. Limits: max_daily_loss=${MAX_DAILY_LOSS}, "
                 f"max_inv/token=${MAX_INV_PER_TOKEN}, max_quote=${MAX_QUOTE_SIZE}")
         except Exception as e:
             log.error(f"[MM-TRADER] init failed, disabling: {e}")
             self.enabled = False
             _tg(f"🔴 MM live-trader init FAILED: {str(e)[:200]}")
+
+    def _init_real_fills_db(self):
+        """Create the mm_real_fills table — captures ACTUAL Polymarket fills so
+        we can compare real vs simulated and validate the strategy live."""
+        import sqlite3
+        from pathlib import Path
+        self._real_fills_db = str(Path(__file__).resolve().parent / "data" / "mm.db")
+        try:
+            with sqlite3.connect(self._real_fills_db, timeout=10) as c:
+                c.execute("PRAGMA busy_timeout=10000")
+                c.execute("""CREATE TABLE IF NOT EXISTS mm_real_fills (
+                    trade_id TEXT PRIMARY KEY, ts REAL, token_id TEXT, side TEXT,
+                    price REAL, size REAL, status TEXT, raw TEXT)""")
+                c.execute("CREATE INDEX IF NOT EXISTS ix_realfills_ts ON mm_real_fills(ts)")
+                # preload seen ids so a restart doesn't double-count
+                for (tid,) in c.execute("SELECT trade_id FROM mm_real_fills"):
+                    self._seen_trade_ids.add(tid)
+            log.info(f"[MM-TRADER] real-fill recording ready ({len(self._seen_trade_ids)} prior)")
+        except Exception as e:
+            log.warning(f"[MM-TRADER] real-fills db init failed: {e}")
+
+    def poll_real_fills(self) -> int:
+        """Poll Polymarket for our recent trades; record any new ones, update
+        inventory + daily PnL + kill switch. Returns count of new fills.
+        Called by a background thread in bot.py every few seconds when live."""
+        if not self.enabled or self._client is None:
+            return 0
+        try:
+            trades = self._client.get_trades()
+        except Exception as e:
+            log.debug(f"[MM-TRADER] get_trades failed: {e}")
+            return 0
+        if not isinstance(trades, list):
+            trades = (trades or {}).get("data", []) if isinstance(trades, dict) else []
+        new = 0
+        import sqlite3, json as _json
+        for t in trades:
+            try:
+                tid = str(t.get("id") or t.get("trade_id") or t.get("transaction_hash") or "")
+                if not tid or tid in self._seen_trade_ids:
+                    continue
+                side = (t.get("side") or "").upper()
+                price = float(t.get("price") or 0)
+                size = float(t.get("size") or t.get("matched_amount") or 0)
+                token_id = str(t.get("asset_id") or t.get("token_id") or "")
+                status = t.get("status") or ""
+                if price <= 0 or size <= 0:
+                    continue
+                with sqlite3.connect(self._real_fills_db, timeout=10) as c:
+                    c.execute("PRAGMA busy_timeout=10000")
+                    c.execute("INSERT OR IGNORE INTO mm_real_fills "
+                              "(trade_id, ts, token_id, side, price, size, status, raw) "
+                              "VALUES (?,?,?,?,?,?,?,?)",
+                              (tid, time.time(), token_id, side, price, size, status,
+                               _json.dumps(t)[:2000]))
+                self._seen_trade_ids.add(tid)
+                self.on_fill(token_id, side, price, size)
+                new += 1
+            except Exception as e:
+                log.debug(f"[MM-TRADER] trade parse err: {e}")
+        if new:
+            log.info(f"[MM-TRADER] recorded {new} REAL fills")
+        return new
 
     def _init_client(self):
         from py_clob_client.client import ClobClient

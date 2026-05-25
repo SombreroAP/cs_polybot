@@ -2349,6 +2349,34 @@ class EsportsBot:
 
         threading.Thread(target=_run_recording_subscriber, daemon=True).start()
 
+        # ─── Real-fill poller (LIVE trading only) ────────────────────────────
+        # When MM_LIVE_TRADING=true, poll Polymarket for our actual trades so
+        # real fills are recorded (mm_real_fills) and inventory / daily-PnL /
+        # kill-switch track reality. No-op in shadow mode.
+        def _run_real_fill_poller():
+            import time as _time
+            if not _MM_AVAILABLE:
+                return
+            _time.sleep(15)
+            try:
+                from mm_live_trader import get_trader
+                trader = get_trader()
+            except Exception as e:
+                logger.warning(f"[REAL-FILL] trader unavailable: {e}")
+                return
+            if not getattr(trader, "enabled", False):
+                logger.info("[REAL-FILL] poller idle (shadow mode)")
+                return
+            logger.info("[REAL-FILL] LIVE — polling Polymarket trades every 5s")
+            while self._running:
+                try:
+                    trader.poll_real_fills()
+                except Exception as e:
+                    logger.warning(f"[REAL-FILL] poll error: {e}")
+                _time.sleep(5)
+
+        threading.Thread(target=_run_real_fill_poller, daemon=True).start()
+
         # Monitor heartbeat + watchdog — if position monitor hangs (past bug: DB lock
         # in sell_position wedges the whole thread, leaving positions stuck 20+ min
         # past their stop-loss), this watchdog kills the process so the wrapper restarts.
