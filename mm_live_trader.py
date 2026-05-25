@@ -268,6 +268,13 @@ class LiveTrader:
                 result["killed"] = True
                 return result
 
+            # Placement circuit breaker — if order placement keeps failing
+            # (e.g. API/SDK incompatibility), stop hammering the endpoint for a
+            # cooldown instead of 400-ing every second.
+            if time.time() < getattr(self, "_place_paused_until", 0.0):
+                result["actions"].append("placement paused (circuit breaker)")
+                return result
+
             # Cancel existing quote first (always safe to do)
             self.cancel(token_id, _locked=True)
 
@@ -287,10 +294,11 @@ class LiveTrader:
                             self._active_orders.setdefault(token_id, {})["bid"] = order_id
                             result["actions"].append(f"BID @{bid_price:.4f} x{size_shares} id={order_id[:10]}")
                             _tg(f"🟢 BID placed: {token_id[:8]} @{bid_price:.4f} x{size_shares}")
+                            self._note_place(True)
                         except Exception as e:
                             log.error(f"[MM-TRADER] BID place failed: {e}")
                             result["actions"].append(f"BID FAIL: {str(e)[:80]}")
-                            _tg(f"🔴 BID place failed: {token_id[:8]}: {str(e)[:120]}")
+                            self._note_place(False, str(e))
                     else:
                         result["actions"].append(f"WOULD BID @{bid_price:.4f} x{size_shares}")
                 else:
@@ -305,16 +313,39 @@ class LiveTrader:
                             self._active_orders.setdefault(token_id, {})["ask"] = order_id
                             result["actions"].append(f"ASK @{ask_price:.4f} x{size_shares} id={order_id[:10]}")
                             _tg(f"🔵 ASK placed: {token_id[:8]} @{ask_price:.4f} x{size_shares}")
+                            self._note_place(True)
                         except Exception as e:
                             log.error(f"[MM-TRADER] ASK place failed: {e}")
                             result["actions"].append(f"ASK FAIL: {str(e)[:80]}")
-                            _tg(f"🔴 ASK place failed: {token_id[:8]}: {str(e)[:120]}")
+                            self._note_place(False, str(e))
                     else:
                         result["actions"].append(f"WOULD ASK @{ask_price:.4f} x{size_shares}")
                 else:
                     result["actions"].append("ASK skipped (inventory cap)")
 
         return result
+
+    # Placement circuit breaker state + handler
+    _place_fails: int = 0
+    _place_paused_until: float = 0.0
+    _PLACE_FAIL_LIMIT: int = 10
+    _PLACE_COOLDOWN_S: float = 600.0
+
+    def _note_place(self, ok: bool, err: str = ""):
+        """Track consecutive place failures; trip a cooldown breaker so a
+        persistent API/SDK incompatibility doesn't spam Polymarket."""
+        if ok:
+            self._place_fails = 0
+            return
+        self._place_fails += 1
+        if self._place_fails >= self._PLACE_FAIL_LIMIT:
+            self._place_paused_until = time.time() + self._PLACE_COOLDOWN_S
+            self._place_fails = 0
+            log.error(f"[MM-TRADER] circuit breaker: {self._PLACE_FAIL_LIMIT} consecutive "
+                      f"place failures — pausing placement {self._PLACE_COOLDOWN_S/60:.0f}min. "
+                      f"last err: {err[:160]}")
+            _tg(f"🔴 MM placement paused {self._PLACE_COOLDOWN_S/60:.0f}min after "
+                f"{self._PLACE_FAIL_LIMIT} failures: {err[:160]}")
 
     def _market_params(self, token_id: str):
         """Fetch + cache tick_size and neg_risk for a token (required by v2)."""
