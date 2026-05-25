@@ -188,12 +188,18 @@ class LiveTrader:
         if not proxy:
             raise RuntimeError("POLYMARKET_PROXY_WALLET not set")
 
-        # Level 2 (signed order placement) requires creating/deriving API creds
+        # Signature type MUST match how the Polymarket account was created:
+        #   0 = EOA (MetaMask/browser wallet, no proxy)
+        #   1 = POLY_PROXY  (email / Google / Magic-link login)  ← most common
+        #   2 = GNOSIS_SAFE (existing Gnosis Safe users)
+        # Wrong value => every order is rejected. Default 1 (email/Magic).
+        sig_type = int(os.environ.get("POLYMARKET_SIGNATURE_TYPE", "1"))
+        log.info(f"[MM-TRADER] signature_type={sig_type} funder={proxy[:10]}…")
         self._client = ClobClient(
             host=host,
             key=priv_key,
             chain_id=POLYGON,
-            signature_type=2,  # email/magic proxy wallet
+            signature_type=sig_type,
             funder=proxy,
         )
         # Derive API creds (read-only ok; orders signed with priv key)
