@@ -105,11 +105,12 @@ async function refreshSlow(){
     $('today').innerHTML = `<span class="${c>=0?'green':'red'}">${money(c)}</span>`; }
   if(pos){
     $('np').textContent = (pos.positions||[]).filter(p=>Math.abs(p.inventory)>0).length;
-    $('posn').textContent = (pos.count||0)+' rows';
+    $('posn').textContent = (pos.live_count||0)+' live · '+(pos.count||0)+' total';
     const tb=$('positions'); tb.innerHTML='';
     (pos.positions||[]).forEach(p=>{
       const invc = p.inventory>0?'green':(p.inventory<0?'red':'dim');
-      tb.innerHTML += `<tr>
+      const rowstyle = p.live ? '' : ' style="opacity:0.45"';  // dim resolved
+      tb.innerHTML += `<tr${rowstyle}>
         <td title="${p.side_team||''}">${p.match||'?'}</td>
         <td class="${gcls(p.game)}">${(p.game||'?').toUpperCase()}</td>
         <td style="text-align:right" class="${invc}">${p.inventory}</td>

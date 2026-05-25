@@ -224,57 +224,91 @@ def pnl_page():
     return render_template("pnl.html")
 
 
-# ── Market-metadata cache (token_id -> readable match info) ─────────────────
+# ── Persistent, ACCUMULATING token->match-name cache ────────────────────────
 # The MM runner only knows token_ids; team names live in Polymarket market
-# data. We keep a throttled cache (refresh <=1/20s) so the live dashboard can
-# show readable match names without hammering the Gamma API on every refresh.
-_meta_cache: dict = {}
+# data. Crucially this cache ACCUMULATES and persists to disk: once we've seen
+# a market we never forget its name, so positions on markets that later RESOLVE
+# (drop off the active list) still render with names instead of raw token ids.
+# `active_ids` tracks which tokens are currently in a live market (so the UI can
+# flag live vs resolved positions).
+_META_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "data", "token_meta.json")
+_meta_cache: dict = {}          # token_id -> info (persists/accumulates)
+_active_ids: set = set()        # token_ids in a currently-active market
 _meta_last = 0.0
 _meta_lock = threading.Lock()
+_meta_loaded = False
+
+
+def _load_meta_once():
+    global _meta_cache, _meta_loaded
+    if _meta_loaded:
+        return
+    try:
+        with open(_META_FILE) as f:
+            _meta_cache = json.load(f)
+    except Exception:
+        _meta_cache = {}
+    _meta_loaded = True
 
 
 def _get_market_meta():
-    global _meta_cache, _meta_last
+    """Return the accumulated token->info map; refresh active markets <=1/20s."""
+    global _meta_last, _active_ids
     now = time.time()
     with _meta_lock:
-        if now - _meta_last < 20 and _meta_cache:
+        _load_meta_once()
+        if now - _meta_last < 20 and _active_ids:
             return _meta_cache
     try:
         from market import MarketFinder
         mf = MarketFinder()
-        mkts = mf.fetch_esports_markets()  # 30s internal cache too
-        meta = {}
-        for m in mkts:
-            info = {
-                "game": m.game, "team_a": m.team_a or "", "team_b": m.team_b or "",
-                "question": m.question or "", "liquidity": m.liquidity or 0,
-                "market_id": m.market_id,
-                "price_a": getattr(m, "price_a", None),
-                "price_b": getattr(m, "price_b", None),
-            }
-            if m.token_id_a:
-                meta[m.token_id_a] = dict(info, side="a")
-            if m.token_id_b:
-                meta[m.token_id_b] = dict(info, side="b")
+        mkts = mf.fetch_esports_markets()
+        active = set()
         with _meta_lock:
-            _meta_cache = meta
+            for m in mkts:
+                info = {
+                    "game": m.game, "team_a": m.team_a or "", "team_b": m.team_b or "",
+                    "question": m.question or "", "liquidity": m.liquidity or 0,
+                    "market_id": m.market_id,
+                    "price_a": getattr(m, "price_a", None),
+                    "price_b": getattr(m, "price_b", None),
+                }
+                if m.token_id_a:
+                    _meta_cache[m.token_id_a] = dict(info, side="a"); active.add(m.token_id_a)
+                if m.token_id_b:
+                    _meta_cache[m.token_id_b] = dict(info, side="b"); active.add(m.token_id_b)
+            _active_ids = active
             _meta_last = now
-        return meta
+            # persist (best-effort) so names survive restarts + resolution
+            try:
+                os.makedirs(os.path.dirname(_META_FILE), exist_ok=True)
+                tmp = _META_FILE + ".tmp"
+                with open(tmp, "w") as f:
+                    json.dump(_meta_cache, f)
+                os.replace(tmp, _META_FILE)
+            except Exception:
+                pass
+        return _meta_cache
     except Exception:
         return _meta_cache
 
 
 def _tok_label(meta, token_id):
     m = meta.get(token_id)
+    live = token_id in _active_ids
     if not m:
-        return {"label": (token_id[:10] + "…") if token_id else "?", "game": "?"}
+        # never-seen token (predates the cache) — clearly mark as unknown/resolved
+        return {"label": "resolved · " + ((token_id[:8] + "…") if token_id else "?"),
+                "game": "?", "side_team": "", "question": "", "live": False}
     ta, tb = m.get("team_a", ""), m.get("team_b", "")
     side = m.get("side")
     matchup = f"{ta} vs {tb}" if ta and tb else (m.get("question", "")[:40])
-    # which side this token represents
+    if not live:
+        matchup += " · resolved"
     this = ta if side == "a" else tb if side == "b" else ""
     return {"label": matchup, "side_team": this, "game": m.get("game", "?"),
-            "question": m.get("question", "")[:60]}
+            "question": m.get("question", "")[:60], "live": live}
 
 
 @app.route("/api/mm_positions")
@@ -305,14 +339,16 @@ def api_mm_positions():
             out.append({
                 "token_id": tok, "game": tok_game.get(tok, lbl.get("game", "?")),
                 "match": lbl["label"], "side_team": lbl.get("side_team", ""),
+                "live": lbl.get("live", False),
                 "inventory": round(inv, 2), "cash": round(cash, 4),
                 "mtm": round(mtm, 4), "n_fills": getattr(s, "n_fills", 0),
                 "book_bid": bid, "book_ask": ask,
                 "our_bid": q.get("bid_price"), "our_ask": q.get("ask_price"),
             })
-        # open positions first (inventory != 0), then active quotes
-        out.sort(key=lambda r: (abs(r["inventory"]) == 0, -abs(r["mtm"])))
-        return jsonify({"positions": out, "count": len(out)})
+        # live positions first, then by |MtM|
+        out.sort(key=lambda r: (not r["live"], abs(r["inventory"]) == 0, -abs(r["mtm"])))
+        n_live = sum(1 for r in out if r["live"])
+        return jsonify({"positions": out, "count": len(out), "live_count": n_live})
     except Exception as e:
         return jsonify({"positions": [], "error": str(e)[:200]})
 
