@@ -71,7 +71,10 @@ class MMConfig:
     # its own .game field. Falls back to model_path (CS2) if the game isn't
     # in the map. Only games with a trained model should be MM-eligible.
     game_model_paths: dict = field(default_factory=lambda: {
-        "cs2": "models/toxic_flow_v2_cb.pkl",
+        # CS2: 5090-GPU model trained on 5.5M samples. A/B vs the old v2 model
+        # on a time-held-out test set: RMSE 2.283c vs 2.385c (+10.1% vs +6.1%
+        # over baseline), toxic precision 40.4% vs 33.8%. Strictly better OOS.
+        "cs2": "models/toxic_flow_cs2_gpu_cb.pkl",
         "lol": "models/toxic_flow_lol_cb.pkl",
     })
     model_threshold_cents: float = 1.5
