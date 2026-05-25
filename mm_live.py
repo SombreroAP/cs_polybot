@@ -147,7 +147,10 @@ class LiveMMRunner:
             try:
                 item = self._queue.get(timeout=1.0)
             except Exception:
+                # idle tick — good moment to run periodic settlement sweep
+                self._maybe_settle()
                 continue
+            self._maybe_settle()
             try:
                 token_id, match_id, bid, ask, ts = item
                 # Reuse the existing on_book code path; it holds self._lock
@@ -158,6 +161,55 @@ class LiveMMRunner:
                 log.debug(f"[MM-WORKER] error processing: {e}")
             finally:
                 self._queue.task_done()
+
+    # ────── Settlement of stale / resolved positions ────────────────────────
+    # When a market resolves, Polymarket stops streaming its book — the sim
+    # would otherwise carry that inventory forever at a stale (fictional) mark.
+    # We periodically close any position whose book hasn't updated in
+    # SETTLE_STALE_S by realising it at the last observed mid (≈0 or 1 once a
+    # market has resolved). Logged as ordinary fills so the DB-derived PnL
+    # stays consistent (each unit closes at the settle price).
+    SETTLE_STALE_S = 1800.0   # 30 min with no book update → treat as closed
+    _settle_interval = 300.0  # run the sweep at most every 5 min
+
+    def _maybe_settle(self):
+        now = time.time()
+        if now - getattr(self, "_last_settle_sweep", 0.0) < self._settle_interval:
+            return
+        self._last_settle_sweep = now
+        try:
+            with self._lock:
+                self._settle_stale_positions_locked(now)
+        except Exception as e:
+            log.debug(f"[MM] settle sweep error: {e}")
+
+    def _settle_stale_positions_locked(self, now: float):
+        settled = 0
+        for token_id, strat in list(self._strategies.items()):
+            inv = getattr(strat, "inventory", 0.0) or 0.0
+            if abs(inv) < 1e-9:
+                continue
+            book = self._last_book.get(token_id)
+            if not book or not book.get("ts"):
+                continue
+            if now - book["ts"] < self.SETTLE_STALE_S:
+                continue  # still fresh — leave the open position alone
+            mid = (book.get("bid", 0) + book.get("ask", 0)) / 2.0
+            if mid <= 0:
+                continue
+            units = int(round(abs(inv)))
+            side = "ask" if inv > 0 else "bid"  # long→sell, short→buy to flatten
+            for _ in range(units):
+                strat.on_fill(side, mid, size=self.cfg.quote_size, ts=now)
+                self._log_fill(now, token_id, None, side + "_fill", mid,
+                               strat.inventory, strat.cash)
+            strat.inventory = 0.0  # clear any fractional remainder
+            self._last_quote[token_id] = {"bid_price": None, "ask_price": None, "ts": now}
+            self._persist_state(strat)
+            settled += 1
+        if settled:
+            log.info(f"[MM] settled {settled} stale positions at last mid "
+                     f"(>{self.SETTLE_STALE_S/60:.0f}min idle)")
 
     def register_token_game(self, token_id: str, game: str) -> None:
         """Tag a token with its game so the strategy picks the right model.

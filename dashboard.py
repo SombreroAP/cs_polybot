@@ -134,11 +134,24 @@ def api_mm():
 
 @app.route("/api/mm_feed")
 def api_mm_feed():
-    """Recent MM decisions + fills feed (30 of each)."""
+    """Recent MM decisions + fills feed (30 of each), enriched with match names."""
     try:
         import sqlite3
         from mm_live import get_runner
         runner = get_runner()
+        meta = _get_market_meta()  # token_id -> readable match info (persistent)
+        try:
+            with runner._lock:
+                tok_game = dict(getattr(runner, "_token_game", {}))
+        except Exception:
+            tok_game = {}
+
+        def enrich(token_id):
+            lbl = _tok_label(meta, token_id)
+            return {"match": lbl["label"], "side_team": lbl.get("side_team", ""),
+                    "game": tok_game.get(token_id) or lbl.get("game", "?"),
+                    "live": lbl.get("live", False)}
+
         with sqlite3.connect(str(runner.db_path), timeout=5.0) as c:
             c.execute("PRAGMA busy_timeout=5000")
             fills = c.execute(
@@ -153,16 +166,16 @@ def api_mm_feed():
             ).fetchall()
         return jsonify({
             "fills": [
-                {"ts": r[0], "token_id": r[1] or "", "match_id": r[2] or "",
-                 "side": r[3], "price": r[4], "sim_inv_after": r[5],
-                 "sim_cash_after": r[6]}
+                dict({"ts": r[0], "token_id": r[1] or "", "match_id": r[2] or "",
+                      "side": r[3], "price": r[4], "sim_inv_after": r[5],
+                      "sim_cash_after": r[6]}, **enrich(r[1] or ""))
                 for r in fills
             ],
             "decisions": [
-                {"ts": r[0], "token_id": r[1] or "", "action": r[2],
-                 "bid_price": r[3], "ask_price": r[4],
-                 "book_bid": r[5], "book_ask": r[6],
-                 "recent_drift_cents": r[7], "reason": r[8]}
+                dict({"ts": r[0], "token_id": r[1] or "", "action": r[2],
+                      "bid_price": r[3], "ask_price": r[4],
+                      "book_bid": r[5], "book_ask": r[6],
+                      "recent_drift_cents": r[7], "reason": r[8]}, **enrich(r[1] or ""))
                 for r in decisions
             ],
         })
@@ -396,6 +409,35 @@ def api_mm_markets():
         return jsonify({"markets": rows, "count": len(rows), "quoting": n_q})
     except Exception as e:
         return jsonify({"markets": [], "error": str(e)[:200]})
+
+
+@app.route("/api/mm_diag")
+def api_mm_diag():
+    """In-process runner diagnostics — eligibility / quoting / strategies by game.
+
+    Runs inside the bot process so it sees the REAL runner state (a separate
+    python process would build its own empty runner).
+    """
+    try:
+        import collections
+        from mm_live import get_runner
+        runner = get_runner()
+        with runner._lock:
+            tg = dict(getattr(runner, "_token_game", {}))
+            elig = set(getattr(runner, "_mm_eligible_tokens", set()))
+            quoting = {k for k, v in runner._last_quote.items()
+                       if v.get("bid_price") is not None or v.get("ask_price") is not None}
+            strat = set(runner._strategies.keys())
+        def by_game(toks):
+            return dict(collections.Counter(tg.get(t, "unreg") for t in toks))
+        return jsonify({
+            "registered_token_game": dict(collections.Counter(tg.values())),
+            "eligible_total": len(elig), "eligible_by_game": by_game(elig),
+            "quoting_total": len(quoting), "quoting_by_game": by_game(quoting),
+            "strategies_total": len(strat),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)[:200]})
 
 
 @app.route("/live")

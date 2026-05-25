@@ -138,9 +138,6 @@ async function refreshSlow(){
 }
 
 async function refreshFast(){
-  const meta = await jget('/api/mm_markets'); // reuse for name lookup
-  const nameByMarket = {};
-  if(meta && meta.markets){ meta.markets.forEach(m=>{ nameByMarket[m.question]=m.match; }); }
   const feed = await jget('/api/mm_feed');
   if(feed){
     const tb=$('decisions'); tb.innerHTML='';
@@ -150,10 +147,12 @@ async function refreshFast(){
       const ashort = a.replace('cancel_and_replace','QUOTE').replace('cancel_all','PULL');
       const drift = d.recent_drift_cents!=null ? Number(d.recent_drift_cents).toFixed(2)+'¢' : '—';
       const reason = d.reason || (a.includes('replace')?'inside touch':'');
+      const match = d.match || ((d.token_id||'').slice(0,8)+'…');
+      const mstyle = d.live===false ? ' style="opacity:0.5"' : '';
       tb.innerHTML += `<tr>
         <td class="dim">${ts2(d.ts)}</td>
-        <td>${(d.token_id||'').slice(0,8)}…</td>
-        <td class="dim">${(d.match_id||'').slice(0,10)}</td>
+        <td${mstyle} title="${d.side_team||''}">${match}</td>
+        <td class="${gcls(d.game)}">${(d.game||'?').toUpperCase()}</td>
         <td class="${acls}">${ashort}</td>
         <td style="text-align:right" class="dim">${px(d.book_bid)}/${px(d.book_ask)}</td>
         <td style="text-align:right" class="blue">${px(d.bid_price)}/${px(d.ask_price)}</td>
