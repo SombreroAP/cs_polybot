@@ -2184,12 +2184,12 @@ class EsportsBot:
                     # Linked tokens come via HLTV which is CS2-only, so they're
                     # always MM-eligible — keep the WS hook firing for them.
                     self._mm_eligible_tokens.update(linked_toks)
-                    # Games we have trained toxic-flow models for. Keep this
-                    # synced with mm_strategy.MMConfig.game_model_paths and the
-                    # files in models/. Quoting on a game without a model risks
-                    # adverse selection (we saw this empirically on LoL before
-                    # a model existed).
-                    MM_GAMES = {"cs2", "lol"}
+                    # Games to quote — env-configurable so we can narrow the
+                    # live run (e.g. LoL-only) without a code change. Must stay
+                    # a subset of games with a trained model in
+                    # mm_strategy.MMConfig.game_model_paths. Default cs2,lol.
+                    MM_GAMES = {g.strip() for g in os.environ.get(
+                        "MM_QUOTE_GAMES", "cs2,lol").split(",") if g.strip()}
                     cand = sorted(
                         [m for m in mkts if m.game in MM_GAMES and (m.liquidity or 0) > 500],
                         key=lambda m: m.liquidity or 0, reverse=True
