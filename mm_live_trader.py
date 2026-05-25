@@ -195,12 +195,14 @@ class LiveTrader:
         if not proxy:
             raise RuntimeError("POLYMARKET_PROXY_WALLET not set")
 
-        # Signature type MUST match how the Polymarket account was created:
+        # Signature type MUST match the account/wallet on CLOB v2:
         #   0 = EOA (MetaMask/browser wallet, no proxy)
-        #   1 = POLY_PROXY  (email / Google / Magic-link login)  ← most common
+        #   1 = POLY_PROXY  (legacy Magic proxy — pre-v2)
         #   2 = GNOSIS_SAFE (existing Gnosis Safe users)
-        # Wrong value => every order is rejected. Default 1 (email/Magic).
-        sig_type = int(os.environ.get("POLYMARKET_SIGNATURE_TYPE", "1"))
+        #   3 = POLY_1271   (deposit-wallet flow — email/Google/Magic on v2) ← default
+        # Post-v2, email/Google accounts are deposit wallets → type 3. Type 1
+        # gets "maker address not allowed, please use the deposit wallet flow".
+        sig_type = int(os.environ.get("POLYMARKET_SIGNATURE_TYPE", "3"))
         log.info(f"[MM-TRADER] signature_type={sig_type} funder={proxy[:10]}…")
         self._client = ClobClient(
             host=host,
@@ -216,6 +218,21 @@ class LiveTrader:
             log.info("[MM-TRADER] connected; v2 API creds derived")
         except Exception as e:
             log.warning(f"[MM-TRADER] could not derive API creds (orders may still work): {e}")
+
+        # Deposit-wallet flow (POLY_1271 / signature_type=3, the default for
+        # email/Google/Magic accounts on CLOB v2): the CLOB requires a
+        # balance-allowance sync before it will accept orders from the deposit
+        # wallet. Skipping this is the documented cause of "maker address not
+        # allowed" / "insufficient balance" rejections.
+        if sig_type == 3:
+            try:
+                from py_clob_client_v2 import BalanceAllowanceParams, AssetType
+                self._client.update_balance_allowance(
+                    BalanceAllowanceParams(asset_type=AssetType.COLLATERAL,
+                                           signature_type=3))
+                log.info("[MM-TRADER] deposit-wallet balance/allowance synced (POLY_1271)")
+            except Exception as e:
+                log.warning(f"[MM-TRADER] balance/allowance sync failed: {e}")
         log.info(f"[MM-TRADER] address: {self._client.get_address()}")
 
     # ────────────────────────────────────────────────────────────────────
