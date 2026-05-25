@@ -96,6 +96,9 @@ class LiveTrader:
     # Real-fill tracking: trade-ids already recorded (so polling is idempotent)
     _seen_trade_ids: set = field(default_factory=set)
     _real_fills_db: str = ""
+    # Per-token market params required by CLOB v2 order creation (cached)
+    _tick_cache: dict = field(default_factory=dict)
+    _neg_cache: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.enabled:
@@ -176,8 +179,12 @@ class LiveTrader:
         return new
 
     def _init_client(self):
-        from py_clob_client.client import ClobClient
-        from py_clob_client.constants import POLYGON
+        # py_clob_client_v2 — Polymarket's CLOB v2 SDK. The old py-clob-client
+        # was archived 2026-05-11 and signs with a pre-v2 EIP-712 version, so
+        # the server rejects every order with `order_version_mismatch`. v2
+        # signs with the current version.
+        from py_clob_client_v2 import ClobClient
+        from py_clob_client_v2.constants import POLYGON
 
         host = os.environ.get("POLYMARKET_CLOB_HOST", "https://clob.polymarket.com")
         priv_key = os.environ.get("POLYMARKET_PRIVATE_KEY")
@@ -202,11 +209,11 @@ class LiveTrader:
             signature_type=sig_type,
             funder=proxy,
         )
-        # Derive API creds (read-only ok; orders signed with priv key)
+        # Derive API creds (L2 auth). v2 renamed this to create_or_derive_api_key.
         try:
-            creds = self._client.create_or_derive_api_creds()
+            creds = self._client.create_or_derive_api_key()
             self._client.set_api_creds(creds)
-            log.info("[MM-TRADER] connected; API creds derived")
+            log.info("[MM-TRADER] connected; v2 API creds derived")
         except Exception as e:
             log.warning(f"[MM-TRADER] could not derive API creds (orders may still work): {e}")
         log.info(f"[MM-TRADER] address: {self._client.get_address()}")
@@ -309,14 +316,35 @@ class LiveTrader:
 
         return result
 
+    def _market_params(self, token_id: str):
+        """Fetch + cache tick_size and neg_risk for a token (required by v2)."""
+        tick = self._tick_cache.get(token_id)
+        if tick is None:
+            tick = self._client.get_tick_size(token_id)
+            self._tick_cache[token_id] = tick
+        neg = self._neg_cache.get(token_id)
+        if neg is None:
+            try:
+                neg = bool(self._client.get_neg_risk(token_id))
+            except Exception:
+                neg = False
+            self._neg_cache[token_id] = neg
+        return tick, neg
+
     def _place(self, token_id: str, side: str, price: float, size: float) -> str:
-        """Actually place an order. Returns order_id."""
-        from py_clob_client.clob_types import OrderArgs, OrderType
+        """Actually place a GTC order via CLOB v2. Returns order_id."""
+        from py_clob_client_v2 import (OrderArgs, OrderType,
+                                       PartialCreateOrderOptions, Side)
+        side_enum = Side.BUY if side.upper() == "BUY" else Side.SELL
+        tick, neg = self._market_params(token_id)
         args = OrderArgs(token_id=token_id, price=round(price, 4),
-                         size=round(size, 4), side=side)
-        signed = self._client.create_order(args)
-        resp = self._client.post_order(signed, OrderType.GTC)
-        return resp.get("orderID", "")
+                         size=round(size, 4), side=side_enum)
+        resp = self._client.create_and_post_order(
+            args,
+            options=PartialCreateOrderOptions(tick_size=tick, neg_risk=neg),
+            order_type=OrderType.GTC,
+        )
+        return (resp.get("orderID") or resp.get("orderId") or "") if isinstance(resp, dict) else ""
 
     def cancel(self, token_id: str, _locked: bool = False) -> dict:
         """Cancel both sides for this token."""
@@ -327,17 +355,16 @@ class LiveTrader:
             ids = self._active_orders.pop(token_id, {})
             if not ids:
                 return result
-            for side, oid in ids.items():
-                if not oid:
-                    continue
+            oids = [oid for oid in ids.values() if oid]
+            if oids:
                 if self.enabled:
                     try:
-                        self._client.cancel(order_id=oid)
-                        result["cancelled"].append(f"{side}={oid[:10]}")
+                        self._client.cancel_orders(oids)  # v2: takes list of ids
+                        result["cancelled"] = [o[:10] for o in oids]
                     except Exception as e:
-                        log.warning(f"[MM-TRADER] cancel {side} {oid[:10]} failed: {e}")
+                        log.warning(f"[MM-TRADER] cancel {len(oids)} orders failed: {e}")
                 else:
-                    result["cancelled"].append(f"WOULD cancel {side}={oid}")
+                    result["cancelled"] = [f"WOULD cancel {o}" for o in oids]
         finally:
             if not _locked:
                 self._lock.release()
