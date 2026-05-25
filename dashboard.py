@@ -170,6 +170,60 @@ def api_mm_feed():
         return jsonify({"fills": [], "decisions": [], "error": str(e)[:200]})
 
 
+@app.route("/api/mm_daily")
+def api_mm_daily():
+    """Daily sim-PnL series for the PnL-curve dashboard.
+
+    Per UTC day: fill count + realized sim cash (ask_fill=+price, bid_fill=-price)
+    plus a running cumulative. Also returns headline today / 7d / lifetime numbers
+    and a per-game split.
+    """
+    try:
+        import sqlite3, time
+        from mm_live import get_runner
+        runner = get_runner()
+        with sqlite3.connect(str(runner.db_path), timeout=5.0) as c:
+            c.execute("PRAGMA busy_timeout=5000")
+            rows = c.execute(
+                "SELECT date(ts,'unixepoch') d, COUNT(*) n, "
+                "COALESCE(SUM(CASE WHEN side='ask_fill' THEN price ELSE -price END),0) cash "
+                "FROM mm_fills GROUP BY d ORDER BY d"
+            ).fetchall()
+            now = time.time()
+            lifetime = c.execute(
+                "SELECT COUNT(*), COALESCE(SUM(CASE WHEN side='ask_fill' THEN price "
+                "ELSE -price END),0) FROM mm_fills"
+            ).fetchone()
+            def window(secs):
+                r = c.execute(
+                    "SELECT COUNT(*), COALESCE(SUM(CASE WHEN side='ask_fill' THEN price "
+                    "ELSE -price END),0) FROM mm_fills WHERE ts > ?", (now - secs,)
+                ).fetchone()
+                return {"fills": r[0] or 0, "cash": round(r[1] or 0.0, 4)}
+        days, cum = [], 0.0
+        for d, n, cash in rows:
+            cum += cash
+            days.append({"date": d, "fills": n, "cash": round(cash, 4),
+                         "cum": round(cum, 4)})
+        n_days = max(1, len(days))
+        return jsonify({
+            "days": days,
+            "today": window(86400),
+            "d7": window(7 * 86400),
+            "lifetime": {"fills": lifetime[0] or 0, "cash": round(lifetime[1] or 0.0, 4)},
+            "avg_per_day": round((lifetime[1] or 0.0) / n_days, 4),
+            "target_per_day": 100.0,
+        })
+    except Exception as e:
+        return jsonify({"days": [], "error": str(e)[:200]})
+
+
+@app.route("/pnl")
+def pnl_page():
+    """Focused daily sim-PnL curve dashboard."""
+    return render_template("pnl.html")
+
+
 def create_app(bot):
     """Create Flask app wired to the bot."""
     bot.on_state_change(push_state)

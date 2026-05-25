@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MM Daily PnL</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'SF Mono','Fira Code',ui-monospace,monospace; background:#0a0a0f; color:#e8e8f0; padding:18px; }
+  h1 { font-size:16px; color:#7c5bf5; margin-bottom:14px; display:flex; align-items:center; gap:10px; }
+  .badge { padding:2px 9px; border-radius:10px; font-size:10px; font-weight:700; }
+  .shadow { background:#1a2a3a; color:#60a5fa; }
+  .live { background:#3a1a1a; color:#f87171; }
+  .cards { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+  .card { background:#12121a; border:1px solid #1e1e2e; border-radius:8px; padding:14px; }
+  .card h2 { font-size:10px; color:#666; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
+  .big { font-size:26px; font-weight:700; }
+  .sub { font-size:11px; color:#777; margin-top:4px; }
+  .green { color:#4ade80; } .red { color:#f87171; } .dim { color:#555; }
+  .chartwrap { background:#12121a; border:1px solid #1e1e2e; border-radius:8px; padding:16px; margin-bottom:16px; }
+  .chartwrap h2 { font-size:11px; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; }
+  .progress { height:10px; background:#1e1e2e; border-radius:5px; overflow:hidden; margin-top:8px; }
+  .progress > div { height:100%; background:linear-gradient(90deg,#7c5bf5,#4ade80); }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:right; color:#666; padding:6px 8px; border-bottom:1px solid #1e1e2e; font-size:10px; text-transform:uppercase; }
+  th:first-child, td:first-child { text-align:left; }
+  td { padding:6px 8px; border-bottom:1px solid #14141f; }
+  .foot { color:#555; font-size:10px; margin-top:10px; }
+</style>
+</head>
+<body>
+  <h1>Market-Making — Daily Sim PnL <span id="mode" class="badge shadow">SHADOW</span></h1>
+
+  <div class="cards">
+    <div class="card"><h2>Today (sim)</h2><div class="big" id="today">—</div><div class="sub" id="todayFills">—</div></div>
+    <div class="card"><h2>7-day avg / day</h2><div class="big" id="d7avg">—</div><div class="sub" id="d7tot">—</div></div>
+    <div class="card"><h2>Lifetime (sim)</h2><div class="big" id="life">—</div><div class="sub" id="lifeFills">—</div></div>
+    <div class="card"><h2>Toward $100/day</h2><div class="big" id="pct">—</div><div class="progress"><div id="bar" style="width:0%"></div></div></div>
+  </div>
+
+  <div class="chartwrap">
+    <h2>Daily PnL — bars = day, line = cumulative</h2>
+    <div id="chart"></div>
+  </div>
+
+  <div class="chartwrap">
+    <h2>Per-day detail</h2>
+    <table>
+      <thead><tr><th>Date</th><th>Fills</th><th>Day PnL</th><th>Cumulative</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="foot" id="foot">loading…</div>
+  </div>
+
+<script>
+const $ = id => document.getElementById(id);
+const money = v => (v>=0?'+$':'-$') + Math.abs(v).toFixed(2);
+
+function drawChart(days){
+  if(!days.length){ $('chart').innerHTML='<div class="dim">no fills yet</div>'; return; }
+  const W=Math.max(700, days.length*46), H=300, padL=48, padR=48, padT=14, padB=42;
+  const iw=W-padL-padR, ih=H-padT-padB;
+  const cashes=days.map(d=>d.cash), cums=days.map(d=>d.cum);
+  const maxBar=Math.max(0.01,...cashes.map(Math.abs));
+  const cumMin=Math.min(0,...cums), cumMax=Math.max(0.01,...cums);
+  const bw=iw/days.length;
+  const yBar=v=>padT+ih/2 - (v/maxBar)*(ih/2)*0.9;
+  const yCum=v=>padT+ih - ((v-cumMin)/(cumMax-cumMin||1))*ih;
+  let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:100%">`;
+  // zero line for bars
+  svg+=`<line x1="${padL}" y1="${padT+ih/2}" x2="${W-padR}" y2="${padT+ih/2}" stroke="#2a2a3a" stroke-width="1"/>`;
+  // bars
+  days.forEach((d,i)=>{
+    const x=padL+i*bw+bw*0.18, w=bw*0.64;
+    const y0=padT+ih/2, y1=yBar(d.cash);
+    const top=Math.min(y0,y1), h=Math.abs(y1-y0);
+    const col=d.cash>=0?'#4ade80':'#f87171';
+    svg+=`<rect x="${x}" y="${top}" width="${w}" height="${h}" fill="${col}" opacity="0.8"/>`;
+    svg+=`<text x="${x+w/2}" y="${H-padB+16}" fill="#666" font-size="9" text-anchor="middle">${d.date.slice(5)}</text>`;
+  });
+  // cumulative line
+  let pts=days.map((d,i)=>`${padL+i*bw+bw/2},${yCum(d.cum)}`).join(' ');
+  svg+=`<polyline points="${pts}" fill="none" stroke="#7c5bf5" stroke-width="2.5"/>`;
+  days.forEach((d,i)=>{ svg+=`<circle cx="${padL+i*bw+bw/2}" cy="${yCum(d.cum)}" r="3" fill="#7c5bf5"/>`; });
+  // cum axis labels
+  svg+=`<text x="${W-padR+6}" y="${yCum(cumMax)+4}" fill="#7c5bf5" font-size="10">${money(cumMax)}</text>`;
+  svg+=`<text x="${W-padR+6}" y="${yCum(cumMin)+4}" fill="#7c5bf5" font-size="10">${money(cumMin)}</text>`;
+  svg+=`</svg>`;
+  $('chart').innerHTML=svg;
+}
+
+async function load(){
+  try{
+    const r=await fetch('/api/mm_daily'); const d=await r.json();
+    // also get live/shadow mode
+    try{ const m=await (await fetch('/api/mm')).json();
+      const live=m.stats && m.stats.live_trading;
+      $('mode').textContent=live?'LIVE':'SHADOW'; $('mode').className='badge '+(live?'live':'shadow');
+    }catch(e){}
+    const t=d.today||{cash:0,fills:0}, w=d.d7||{cash:0,fills:0}, L=d.lifetime||{cash:0,fills:0};
+    $('today').innerHTML=`<span class="${t.cash>=0?'green':'red'}">${money(t.cash)}</span>`;
+    $('todayFills').textContent=`${t.fills} fills`;
+    const d7avg=(w.cash||0)/7;
+    $('d7avg').innerHTML=`<span class="${d7avg>=0?'green':'red'}">${money(d7avg)}</span>`;
+    $('d7tot').textContent=`${money(w.cash)} over 7d · ${w.fills} fills`;
+    $('life').innerHTML=`<span class="${L.cash>=0?'green':'red'}">${money(L.cash)}</span>`;
+    $('lifeFills').textContent=`${L.fills} fills · ${(d.days||[]).length} days`;
+    const pct=Math.max(0,Math.min(100, d7avg/ (d.target_per_day||100) *100));
+    $('pct').textContent=pct.toFixed(1)+'%'; $('bar').style.width=pct+'%';
+    drawChart(d.days||[]);
+    const tb=$('tbody'); tb.innerHTML='';
+    (d.days||[]).slice().reverse().forEach(x=>{
+      tb.innerHTML+=`<tr><td>${x.date}</td><td style="text-align:right">${x.fills}</td>`+
+        `<td style="text-align:right" class="${x.cash>=0?'green':'red'}">${money(x.cash)}</td>`+
+        `<td style="text-align:right">${money(x.cum)}</td></tr>`;
+    });
+    $('foot').textContent='updated '+new Date().toLocaleTimeString()+' · auto-refresh 30s'+(d.error?(' · ERR: '+d.error):'');
+  }catch(e){ $('foot').textContent='fetch error: '+e; }
+}
+load(); setInterval(load, 30000);
+</script>
+</body>
+</html>
