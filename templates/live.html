@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MM Live Command Center</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'SF Mono','Fira Code',ui-monospace,monospace; background:#0a0a0f; color:#e8e8f0; padding:16px; font-size:12px; }
+  h1 { font-size:16px; color:#7c5bf5; margin-bottom:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  a { color:#60a5fa; text-decoration:none; font-size:11px; }
+  .badge { padding:2px 9px; border-radius:10px; font-size:10px; font-weight:700; }
+  .shadow { background:#1a2a3a; color:#60a5fa; } .live { background:#3a1a1a; color:#f87171; }
+  .pill { background:#1e1e2e; color:#aaa; padding:2px 8px; border-radius:10px; font-size:10px; }
+  .cards { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:14px; }
+  .card { background:#12121a; border:1px solid #1e1e2e; border-radius:8px; padding:12px; }
+  .card h2 { font-size:9px; color:#666; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
+  .big { font-size:20px; font-weight:700; }
+  .green { color:#4ade80; } .red { color:#f87171; } .yellow { color:#fbbf24; } .dim { color:#555; } .blue { color:#60a5fa; }
+  .panel { background:#12121a; border:1px solid #1e1e2e; border-radius:8px; padding:12px; margin-bottom:14px; }
+  .panel h2 { font-size:11px; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; display:flex; justify-content:space-between; }
+  table { width:100%; border-collapse:collapse; font-size:11px; }
+  th { text-align:right; color:#666; padding:5px 7px; border-bottom:1px solid #1e1e2e; font-size:9px; text-transform:uppercase; position:sticky; top:0; background:#12121a; }
+  th:first-child,td:first-child { text-align:left; }
+  td { padding:5px 7px; border-bottom:1px solid #14141f; white-space:nowrap; }
+  .scroll { max-height:340px; overflow-y:auto; }
+  .scroll-tall { max-height:460px; overflow-y:auto; }
+  .g-cs2 { color:#fbbf24; } .g-lol { color:#22d3ee; } .g-dota2 { color:#f87171; } .g-valorant { color:#e879f9; }
+  .tag { font-size:9px; padding:1px 5px; border-radius:4px; background:#1e1e2e; }
+  .act-replace { color:#4ade80; } .act-cancel { color:#f87171; } .act-noop { color:#555; }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .foot { color:#555; font-size:10px; margin-top:8px; }
+  @media(max-width:900px){ .cards{grid-template-columns:repeat(2,1fr)} .row2{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+  <h1>MM Live Command Center
+    <span id="mode" class="badge shadow">SHADOW</span>
+    <a href="/pnl">📈 PnL curve →</a>
+  </h1>
+
+  <div class="cards">
+    <div class="card"><h2>Sim PnL today</h2><div class="big" id="today">—</div></div>
+    <div class="card"><h2>Active quotes</h2><div class="big blue" id="aq">—</div></div>
+    <div class="card"><h2>Open positions</h2><div class="big" id="np">—</div></div>
+    <div class="card"><h2>Decisions/30m</h2><div class="big" id="dec">—</div></div>
+    <div class="card"><h2>Markets quoting</h2><div class="big" id="mq">—</div></div>
+  </div>
+
+  <div class="row2">
+    <div class="panel">
+      <h2>Open positions <span class="pill" id="posn">—</span></h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Match</th><th>Game</th><th>Inv</th><th>Book</th><th>Our quote</th><th>MtM</th></tr></thead>
+          <tbody id="positions"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Active markets / matches <span class="pill" id="mktn">—</span></h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Match</th><th>Game</th><th>Liq</th><th>Price</th><th>Status</th></tr></thead>
+          <tbody id="markets"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Decision feed — how we're quoting <span class="pill">live · every 3s</span></h2>
+    <div class="scroll-tall">
+      <table>
+        <thead><tr>
+          <th>Time</th><th>Match</th><th>Game</th><th>Action</th>
+          <th>Book bid/ask</th><th>Our bid/ask</th><th>Pred drift</th><th>Reason</th>
+        </tr></thead>
+        <tbody id="decisions"></tbody>
+      </table>
+    </div>
+    <div class="foot" id="foot">loading…</div>
+  </div>
+
+<script>
+const $ = id => document.getElementById(id);
+const money = v => (v==null?'—':((v>=0?'+$':'-$')+Math.abs(v).toFixed(2)));
+const gcls = g => 'g-'+(g||'').toLowerCase();
+const ts2 = t => { try { return new Date(t*1000).toLocaleTimeString(); } catch(e){ return ''; } };
+const px = v => (v==null?'—':Number(v).toFixed(3));
+
+async function jget(u){ try { return await (await fetch(u)).json(); } catch(e){ return null; } }
+
+async function refreshSlow(){
+  const [mm, daily, pos, mkts] = await Promise.all([
+    jget('/api/mm'), jget('/api/mm_daily'), jget('/api/mm_positions'), jget('/api/mm_markets')
+  ]);
+  if(mm && mm.stats){
+    const live = mm.stats.live_trading;
+    $('mode').textContent = live?'LIVE':'SHADOW'; $('mode').className='badge '+(live?'live':'shadow');
+    $('aq').textContent = mm.stats.active_quotes_now ?? '—';
+    $('dec').textContent = mm.stats.decisions_24h!=null ? (mm.stats.decisions_24h).toLocaleString() : '—';
+  }
+  if(daily && daily.today){ const c=daily.today.cash;
+    $('today').innerHTML = `<span class="${c>=0?'green':'red'}">${money(c)}</span>`; }
+  if(pos){
+    $('np').textContent = (pos.positions||[]).filter(p=>Math.abs(p.inventory)>0).length;
+    $('posn').textContent = (pos.count||0)+' rows';
+    const tb=$('positions'); tb.innerHTML='';
+    (pos.positions||[]).forEach(p=>{
+      const invc = p.inventory>0?'green':(p.inventory<0?'red':'dim');
+      tb.innerHTML += `<tr>
+        <td title="${p.side_team||''}">${p.match||'?'}</td>
+        <td class="${gcls(p.game)}">${(p.game||'?').toUpperCase()}</td>
+        <td style="text-align:right" class="${invc}">${p.inventory}</td>
+        <td style="text-align:right" class="dim">${px(p.book_bid)}/${px(p.book_ask)}</td>
+        <td style="text-align:right" class="blue">${px(p.our_bid)}/${px(p.our_ask)}</td>
+        <td style="text-align:right" class="${p.mtm>=0?'green':'red'}">${money(p.mtm)}</td></tr>`;
+    });
+    if(!(pos.positions||[]).length) tb.innerHTML='<tr><td colspan=6 class=dim>no open positions / active quotes</td></tr>';
+  }
+  if(mkts){
+    $('mq').textContent = mkts.quoting ?? '—';
+    $('mktn').textContent = (mkts.count||0)+' markets · '+(mkts.quoting||0)+' quoting';
+    const tb=$('markets'); tb.innerHTML='';
+    (mkts.markets||[]).slice(0,40).forEach(m=>{
+      const st = m.quoting?'<span class="tag green">QUOTING</span>':(m.engaged?'<span class="tag yellow">tracked</span>':'<span class="tag dim">idle</span>');
+      tb.innerHTML += `<tr>
+        <td title="${m.question||''}">${m.match||'?'}</td>
+        <td class="${gcls(m.game)}">${(m.game||'?').toUpperCase()}</td>
+        <td style="text-align:right" class="dim">${(m.liquidity||0).toLocaleString()}</td>
+        <td style="text-align:right" class="dim">${px(m.price_a)}</td>
+        <td style="text-align:right">${st}</td></tr>`;
+    });
+    if(!(mkts.markets||[]).length) tb.innerHTML='<tr><td colspan=5 class=dim>no active markets</td></tr>';
+  }
+}
+
+async function refreshFast(){
+  const meta = await jget('/api/mm_markets'); // reuse for name lookup
+  const nameByMarket = {};
+  if(meta && meta.markets){ meta.markets.forEach(m=>{ nameByMarket[m.question]=m.match; }); }
+  const feed = await jget('/api/mm_feed');
+  if(feed){
+    const tb=$('decisions'); tb.innerHTML='';
+    (feed.decisions||[]).forEach(d=>{
+      const a=d.action||'';
+      const acls = a.includes('replace')?'act-replace':(a.includes('cancel')?'act-cancel':'act-noop');
+      const ashort = a.replace('cancel_and_replace','QUOTE').replace('cancel_all','PULL');
+      const drift = d.recent_drift_cents!=null ? Number(d.recent_drift_cents).toFixed(2)+'¢' : '—';
+      const reason = d.reason || (a.includes('replace')?'inside touch':'');
+      tb.innerHTML += `<tr>
+        <td class="dim">${ts2(d.ts)}</td>
+        <td>${(d.token_id||'').slice(0,8)}…</td>
+        <td class="dim">${(d.match_id||'').slice(0,10)}</td>
+        <td class="${acls}">${ashort}</td>
+        <td style="text-align:right" class="dim">${px(d.book_bid)}/${px(d.book_ask)}</td>
+        <td style="text-align:right" class="blue">${px(d.bid_price)}/${px(d.ask_price)}</td>
+        <td style="text-align:right" class="yellow">${drift}</td>
+        <td class="dim">${reason}</td></tr>`;
+    });
+    if(!(feed.decisions||[]).length) tb.innerHTML='<tr><td colspan=8 class=dim>no decisions yet</td></tr>';
+    $('foot').textContent='updated '+new Date().toLocaleTimeString()+(feed.error?(' · ERR '+feed.error):'');
+  }
+}
+
+refreshSlow(); refreshFast();
+setInterval(refreshFast, 3000);
+setInterval(refreshSlow, 15000);
+</script>
+</body>
+</html>
