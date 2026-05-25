@@ -93,6 +93,12 @@ class LiveMMRunner:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.cfg = cfg or MMConfig()
         self._lock = threading.Lock()
+        # Sim-fill simulation toggle. When MM_SIM_FILLS=false we do NOT
+        # synthesize fills from book crossings — the strategy still decides
+        # quotes (and drives the live trader / real-fill recording), but no
+        # simulated fills/PnL are produced. "real data only" mode.
+        import os as _os
+        self._sim_fills = _os.environ.get("MM_SIM_FILLS", "true").lower() == "true"
         self._strategies: Dict[str, MMStrategy] = {}
         # Per-token last-quote we logged, used for fill detection on next update
         self._last_quote: Dict[str, dict] = {}
@@ -383,7 +389,7 @@ class LiveMMRunner:
             self._strategies[token_id] = strat
 
         fill_happened = False
-        if last_q and prev_bid is not None and prev_ask is not None:
+        if self._sim_fills and last_q and prev_bid is not None and prev_ask is not None:
             our_bid = last_q.get("bid_price")
             our_ask = last_q.get("ask_price")
             # Bid fills when the NEW best_ask drops to or below our bid
